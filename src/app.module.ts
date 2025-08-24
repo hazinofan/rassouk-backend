@@ -1,8 +1,10 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+import { UsersModule } from './users/users.module';
+import { AuthModule } from './auth/auth.module';
 
-@Module({
+@Module({ 
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
@@ -15,9 +17,11 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
         password: config.get('DB_PASS'),
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
-        synchronize: true, // ❌ disable in production
+        synchronize: true,
       }),
     }),
+    UsersModule,
+    AuthModule,
   ],
 })
 export class AppModule {}
