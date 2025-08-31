@@ -26,26 +26,28 @@ export class AuthService {
     private mail: MailService,
   ) {}
 
-  private async signAccess(user: User) {
-    return this.jwt.signAsync(
-      { sub: user.id, email: user.email, role: user.role },
-      { secret: this.cfg.get('JWT_ACCESS_SECRET'), expiresIn: '15m' },
-    );
+  private signAccess(user: { id: number; email: string; role: string; isOnboarded?: boolean }) {
+    const payload = { sub: user.id, email: user.email, role: user.role, isOnboarded: user.isOnboarded };
+    return this.jwt.signAsync(payload, {
+      secret: this.cfg.get<string>('JWT_ACCESS_SECRET'),
+      expiresIn: '15m',
+      algorithm: 'HS256',
+      // issuer/audience only if you also verify them
+    });
   }
 
-  private async signRefresh(user: { id: number }) {
-    return this.jwt.signAsync(
-      { sub: user.id, type: 'refresh' },
-      {
-        secret: this.cfg.get<string>('JWT_REFRESH_SECRET')!,
-        expiresIn: +this.cfg.get<number>('JWT_REFRESH_TTL')! || 2592000, // 30d
-      },
-    );
+  private signRefresh(user: { id: number }) {
+    const payload = { sub: user.id, type: 'refresh' };
+    return this.jwt.signAsync(payload, {
+      secret: this.cfg.get<string>('JWT_REFRESH_SECRET'),
+      expiresIn: '7d',
+      algorithm: 'HS256',
+    });
   }
 
-  private async saveRefreshToken(_user: { id: number }, _refreshToken: string) {
-    // TODO: store hash in DB if you implement rotation/revocation
-    return;
+  private async saveRefreshToken(user: { id: number }, refreshToken: string) {
+    const hash = await bcrypt.hash(refreshToken, 10);
+    await this.usersService.setRefreshTokenHash(user.id, hash);
   }
 
   async signup(dto: SignupDto) {
@@ -53,16 +55,23 @@ export class AuthService {
     const existing = await this.usersService.findByEmail(email);
     if (existing) throw new BadRequestException('Email déjà utilisé');
 
-    // ✅ hash before save
     const passwordHash = await bcrypt.hash(dto.password, 10);
 
-    // if you added a role column: dto.role or default 'candidat'
+    const role =
+      dto.role === 'employer' || dto.role === 'admin' ? dto.role : 'candidat';
+
+    // ⬇️ Onboarding now applies to BOTH employer and candidat (not admin)
+    const requiresOnboarding = role !== 'admin';
+
     const user = await this.usersService.create({
       email,
       passwordHash,
-      role: (dto as any).role ?? 'candidat',
+      role,
+      isOnboarded: requiresOnboarding ? false : true,
+      onboardingStep: 0,
     });
 
+    // Email verification token
     const token = crypto.randomBytes(32).toString('hex');
     const expiresAt = new Date(Date.now() + 24 * 3600 * 1000);
 
@@ -73,6 +82,9 @@ export class AuthService {
 
     return {
       message: 'Utilisateur créé. Vérifie ton email pour activer ton compte.',
+      user: { id: user.id, email: user.email, role: user.role },
+      // ⬇️ Frontend can use this to decide redirect after email verify/login
+      needsOnboarding: requiresOnboarding,
     };
   }
 
@@ -108,9 +120,17 @@ export class AuthService {
 
     return {
       message: 'Connexion réussie',
-      user: { id: user.id, email: user.email, role: user.role },
+      user: {
+        id: user.id,
+        email: user.email,
+        role: user.role,
+        isOnboarded: user.isOnboarded,
+        onboardingStep: user.onboardingStep,
+      },
       accessToken,
       refreshToken,
+      // ⬇️ Non-admin users need onboarding if not completed
+      needsOnboarding: user.role !== 'admin' && !user.isOnboarded,
     };
   }
 
@@ -146,20 +166,65 @@ export class AuthService {
       const randomPassword = crypto.randomBytes(10).toString('hex');
       const passwordHash = await bcrypt.hash(randomPassword, 10);
 
-      // ✅ Your UsersService.create now expects ONE object
       user = await this.usersService.create({
         email,
         passwordHash,
-        role: 'candidat', // or choose based on your flow
+        role: 'candidat',
+        // ⬇️ candidat requires onboarding
+        isOnboarded: false,
+        onboardingStep: 0,
       });
 
-      await this.usersService.verifyEmail(user.id); // mark as verified
+      await this.usersService.verifyEmail(user.id);
     }
 
     const accessToken = await this.signAccess(user);
     const refreshToken = await this.signRefresh(user);
-    await this.saveRefreshToken(user, refreshToken); // no-op if you kept it stateless
+    await this.saveRefreshToken(user, refreshToken);
 
     return { accessToken, refreshCookie: refreshToken };
+  }
+
+  async refresh(refreshToken?: string) {
+    if (!refreshToken) throw new UnauthorizedException('No refresh token');
+
+    // 1) Verify JWT
+    let payload: { sub: number; type?: string; email?: string };
+    try {
+      payload = (await this.jwt.verifyAsync(refreshToken, {
+        secret: this.cfg.get<string>('JWT_REFRESH_SECRET')!,
+      })) as any;
+    } catch {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // optional: type guard
+    if (payload.type !== 'refresh') {
+      throw new UnauthorizedException('Not a refresh token');
+    }
+
+    // 2) Load user
+    const user = await this.usersService.findById(payload.sub);
+    if (!user) throw new UnauthorizedException('User not found');
+
+    // 3) (Optional but recommended) Check stored hash matches
+    //    Uncomment when you implement saveRefreshToken() to persist a hash
+    const storedHash = await this.usersService.getRefreshTokenHash(user.id);
+    if (!storedHash || !(await bcrypt.compare(refreshToken, storedHash))) {
+      throw new UnauthorizedException('Refresh token mismatch');
+    }
+
+    // 4) Rotate tokens
+    const accessToken = await this.signAccess(user);
+    const newRefresh = await this.signRefresh(user);
+
+    // If you persist hashes, update it:
+    await this.saveRefreshToken(user, newRefresh);
+
+    return {
+      user: { id: user.id, email: user.email, role: user.role },
+      accessToken,
+      refreshToken: newRefresh,
+    };
   }
 }
