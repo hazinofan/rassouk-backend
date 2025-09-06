@@ -1,3 +1,5 @@
+import { EmployerProfile } from 'src/employer-profile/entities/employer-profile.entity';
+import { Job } from 'src/jobs/entities/job.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -5,6 +7,9 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  OneToMany,
+  JoinColumn,
+  OneToOne,
 } from 'typeorm';
 // src/users/user.entity.ts
 export type UserRole = 'admin' | 'candidat' | 'employer';
@@ -24,10 +29,10 @@ export class User {
   @Column()
   passwordHash: string;
 
-  @Column({ default: false })
+  @Column()
   emailVerified: boolean;
 
-  @Column({ type: 'varchar', length: 255, nullable: true })
+  @Column({ type: 'varchar', length: 255, nullable: true ,select: false })
   refreshTokenHash?: string | null;
 
   @Column({
@@ -37,8 +42,14 @@ export class User {
   })
   role: UserRole;
 
+  @OneToMany(() => Job, (job) => job.employer)
+  jobs: Job[];
+
+  @OneToOne(() => EmployerProfile, (p) => p.user, { nullable: true })
+  profile?: EmployerProfile;
+
   @Column({ type: 'int', default: 0 })
-  onboardingStep: number;
+  onboardingStep: number; 
 
   @Column({ type: 'boolean', default: false })
   isOnboarded: boolean;

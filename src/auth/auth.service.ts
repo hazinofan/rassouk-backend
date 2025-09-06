@@ -26,11 +26,11 @@ export class AuthService {
     private mail: MailService,
   ) {}
 
-  private signAccess(user: { id: number; email: string; role: string; isOnboarded?: boolean }) {
-    const payload = { sub: user.id, email: user.email, role: user.role, isOnboarded: user.isOnboarded };
+  private signAccess(user: { id: number; email: string; role: string; isOnboarded?: boolean, name: string }) {
+    const payload = { sub: user.id, email: user.email, role: user.role, isOnboarded: user.isOnboarded, name: user.name };
     return this.jwt.signAsync(payload, {
       secret: this.cfg.get<string>('JWT_ACCESS_SECRET'),
-      expiresIn: '15m',
+      expiresIn: '24h',
       algorithm: 'HS256',
       // issuer/audience only if you also verify them
     });

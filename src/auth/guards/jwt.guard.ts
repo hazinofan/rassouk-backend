@@ -22,7 +22,7 @@ export class JwtAuthGuard implements CanActivate {
         secret: this.cfg.get<string>('JWT_ACCESS_SECRET'), 
         algorithms: ['HS256'],
       }); 
-      req.user = { id: payload.sub, email: payload.email, role: payload.role, isOnboarded: payload.isOnboarded };
+      req.user = { id: payload.sub, email: payload.email, role: payload.role, isOnboarded: payload.isOnboarded, name: payload.name };
       return true;
     } catch {
       throw new UnauthorizedException('Invalid or expired token'); 

@@ -7,14 +7,15 @@ import { EmployerProfilesModule } from './employer-profile/employer-profile.modu
 import { CandidateProfilesModule } from './candidate-profile/candidate-profile.module';
 import { PasswordResetModule } from './auth/password-reset.module';
 import { UploadModule } from './upload/upload.module';
+import { JobsModule } from './jobs/jobs.module';
 
-@Module({ 
+@Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
-        type: 'mysql', 
+        type: 'mysql',
         host: config.get('DB_HOST'),
         port: config.get<number>('DB_PORT'),
         username: config.get('DB_USER'),
@@ -22,6 +23,8 @@ import { UploadModule } from './upload/upload.module';
         database: config.get('DB_NAME'),
         autoLoadEntities: true,
         synchronize: true,
+        charset: 'utf8mb4',
+        collation: 'utf8mb4_unicode_ci',
       }),
     }),
     UsersModule,
@@ -29,7 +32,8 @@ import { UploadModule } from './upload/upload.module';
     EmployerProfilesModule,
     CandidateProfilesModule,
     PasswordResetModule,
-    UploadModule
+    UploadModule,
+    JobsModule,
   ],
 })
 export class AppModule {}
