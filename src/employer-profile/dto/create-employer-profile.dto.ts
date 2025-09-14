@@ -26,7 +26,7 @@ export class UpsertEmployerProfileDto {
   teamSize?: TeamSize;
 
   @IsOptional() @IsInt() @Min(1900) @Max(new Date().getFullYear())
-  yearEstablished?: number;
+  yearEstablished?: string;
 
   @IsOptional() @IsUrl()
   websiteUrl?: string;

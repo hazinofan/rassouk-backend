@@ -283,8 +283,6 @@ export class JobsService {
     qb.take(take).skip(skip);
 
     const [data, total] = await qb.getManyAndCount();
-    console.log('[SQL]', qb.getSql());
-    console.log('[PARAMS]', qb.getParameters());
 
     return { data, total, page: Number(page), limit: take };
   }

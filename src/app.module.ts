@@ -8,6 +8,9 @@ import { CandidateProfilesModule } from './candidate-profile/candidate-profile.m
 import { PasswordResetModule } from './auth/password-reset.module';
 import { UploadModule } from './upload/upload.module';
 import { JobsModule } from './jobs/jobs.module';
+import { ApplicationsModule } from './applications/applications.module';
+import { JobBookmarksModule } from './job-bookmark/job-bookmark.module';
+import { JobAlertsModule } from './alerts/alerts.module';
 
 @Module({
   imports: [
@@ -34,6 +37,9 @@ import { JobsModule } from './jobs/jobs.module';
     PasswordResetModule,
     UploadModule,
     JobsModule,
+    ApplicationsModule,
+    JobBookmarksModule,
+    JobAlertsModule,
   ],
 })
 export class AppModule {}

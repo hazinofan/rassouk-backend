@@ -25,7 +25,7 @@ export class CreateJobDto {
   minSalary?: number;
 
   @IsOptional() @Type(() => Number) @IsInt() @Min(0)
-  maxSalary?: number;
+  maxSalary?: number; 
 
   @IsOptional() @IsEnum(SalaryType)
   salaryType?: SalaryType;

@@ -1,7 +1,9 @@
+import { Application } from 'src/applications/entities/application.entity';
 import { User } from 'src/users/users.entity';
 import {
   Entity, PrimaryGeneratedColumn, Column, ManyToOne, Index,
-  CreateDateColumn, UpdateDateColumn, DeleteDateColumn
+  CreateDateColumn, UpdateDateColumn, DeleteDateColumn,
+  OneToMany
 } from 'typeorm';
 
 export enum SalaryType { MONTHLY='MONTHLY', YEARLY='YEARLY', HOURLY='HOURLY' }
@@ -72,6 +74,9 @@ export class Job {
 
   @ManyToOne(() => User, (u) => u.jobs, { nullable: false })
   employer: User;
+
+  @OneToMany(() => Application, (app) => app.job)
+  applications: Application[]
 
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;

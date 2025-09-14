@@ -54,8 +54,8 @@ export class EmployerProfile {
   @Column({ type: 'enum', enum: TeamSize, nullable: true })
   teamSize?: TeamSize;
 
-  @Column({ type: 'smallint', nullable: true })
-  yearEstablished?: number;
+  @Column({ nullable: true })
+  yearEstablished?: string;
 
   @Column({ length: 255, nullable: true })
   websiteUrl?: string;

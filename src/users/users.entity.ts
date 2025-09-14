@@ -1,3 +1,5 @@
+import { Application } from 'src/applications/entities/application.entity';
+import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
 import { EmployerProfile } from 'src/employer-profile/entities/employer-profile.entity';
 import { Job } from 'src/jobs/entities/job.entity';
 import {
@@ -29,7 +31,7 @@ export class User {
   @Column()
   passwordHash: string;
 
-  @Column()
+  @Column({ default: 0})
   emailVerified: boolean;
 
   @Column({ type: 'varchar', length: 255, nullable: true ,select: false })
@@ -48,11 +50,17 @@ export class User {
   @OneToOne(() => EmployerProfile, (p) => p.user, { nullable: true })
   profile?: EmployerProfile;
 
+  @OneToOne(() => CandidateProfile, (p) => p.user, { nullable: true })
+  candidateProfile?: CandidateProfile;
+
   @Column({ type: 'int', default: 0 })
   onboardingStep: number; 
 
   @Column({ type: 'boolean', default: false })
   isOnboarded: boolean;
+
+  @OneToMany(() => Application, (app) => app.candidate)
+  applications: Application[]
 
   @CreateDateColumn()
   createdAt: Date;

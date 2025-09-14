@@ -53,7 +53,7 @@ export class CandidateProfile {
   phone?: string;
 
   @Column({ length: 255, nullable: true })
-  contactEmail?: string; // can mirror users.email or be custom
+  contactEmail?: string; 
 
   @Column({ length: 255, nullable: true })
   websiteUrl?: string;
@@ -74,7 +74,7 @@ export class CandidateProfile {
   @Column({ length: 100, nullable: true })
   nationality?: string;
 
-  @Column({ type: 'date', nullable: true })
+  @Column({ nullable: true })
   birthDate?: string;
 
   @Column({ type: 'enum', enum: Gender, default: Gender.UNSPECIFIED })

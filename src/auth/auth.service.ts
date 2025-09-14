@@ -56,7 +56,7 @@ export class AuthService {
     if (existing) throw new BadRequestException('Email déjà utilisé');
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
-
+    const name = dto.name
     const role =
       dto.role === 'employer' || dto.role === 'admin' ? dto.role : 'candidat';
 
@@ -67,6 +67,7 @@ export class AuthService {
       email,
       passwordHash,
       role,
+      name,
       isOnboarded: requiresOnboarding ? false : true,
       onboardingStep: 0,
     });
@@ -170,7 +171,6 @@ export class AuthService {
         email,
         passwordHash,
         role: 'candidat',
-        // ⬇️ candidat requires onboarding
         isOnboarded: false,
         onboardingStep: 0,
       });

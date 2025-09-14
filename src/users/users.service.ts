@@ -17,7 +17,12 @@ export class UsersService {
   }
 
   // NEW: create with plaintext password (hash it here)
-  async createWithPassword(data: { email: string; password: string; name?: string; role?: UserRole }) {
+  async createWithPassword(data: {
+    email: string;
+    password: string;
+    name?: string;
+    role?: UserRole;
+  }) {
     const passwordHash = await bcrypt.hash(data.password, 10);
     const user = this.repo.create({
       email: data.email,
@@ -34,11 +39,29 @@ export class UsersService {
   }
 
   async findByEmail(email: string) {
-    return this.repo.findOne({ where: { email } });
+    return this.repo.findOne({
+      where: { email },
+      relations: {
+        candidateProfile: {
+          resumes: true,
+          educations: true,
+          experiences: true
+        }
+      }
+    });
   }
 
   async findById(id: number) {
-    return this.repo.findOne({ where: { id } });
+    return this.repo.findOne({
+      where: { id },
+      relations: {
+        candidateProfile: {
+          resumes: true,
+          educations: true,
+          experiences: true
+        }
+      },
+    });
   }
 
   async verifyEmail(id: number) {
