@@ -16,6 +16,7 @@ import { UpdateJobDto } from './dto/update-job.dto';
 import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
 import { Job, JobStatus, JobType } from './entities/job.entity';
+import { ApplicationStatus } from 'src/applications/entities/application.entity';
 
 function parseSalary(label?: string): { min?: number; max?: number } {
   if (!label) return {};
@@ -297,13 +298,42 @@ export class JobsService {
   }
 
   async findMine(employerId: number, page = 1, limit = 20) {
-    const [data, total] = await this.repo.findAndCount({
-      where: { employer: { id: employerId } },
-      order: { createdAt: 'DESC' },
-      take: limit,
-      skip: (page - 1) * limit,
-    });
-    return { data, total, page, limit };
+    const take = Math.min(Math.max(+limit || 20, 1), 100);
+    const skip = (Math.max(+page || 1, 1) - 1) * take;
+
+    const qb = this.repo
+      .createQueryBuilder('job')
+      .where('job.employerId = :employerId', { employerId })
+      .orderBy('job.createdAt', 'DESC')
+      .take(take)
+      .skip(skip)
+      // Count applications for each job (filter statuses if you want)
+      .loadRelationCountAndMap(
+        'job.applicationsCount',
+        'job.applications',
+        'app',
+        // Example: exclude WITHDRAWN from the count; remove this block to count all
+        (sub) =>
+          sub.andWhere('app.status != :withdrawn', {
+            withdrawn: ApplicationStatus.WITHDRAWN,
+          }),
+      );
+
+    const [items, total] = await qb.getManyAndCount();
+
+    // If you expose plain JSON (no class-transformer), map the count to a field:
+    const data = items.map((j: any) => ({
+      id: j.id,
+      title: j.title,
+      slug: j.slug,
+      jobType: j.jobType,
+      status: j.status,
+      createdAt: j.createdAt,
+      expiresAt: j.expiresAt,
+      applicationsCount: j.applicationsCount ?? 0,
+    }));
+
+    return { data, total, page: +page, limit: take };
   }
 
   async update(id: number, employerId: number, dto: UpdateJobDto) {

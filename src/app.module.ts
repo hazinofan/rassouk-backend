@@ -11,6 +11,8 @@ import { JobsModule } from './jobs/jobs.module';
 import { ApplicationsModule } from './applications/applications.module';
 import { JobBookmarksModule } from './job-bookmark/job-bookmark.module';
 import { JobAlertsModule } from './alerts/alerts.module';
+import { SavedCandidateModule } from './saved_candidate/saved_candidate.module';
+import { AnalyticsModule } from './stats/stats.module';
 
 @Module({
   imports: [
@@ -40,6 +42,8 @@ import { JobAlertsModule } from './alerts/alerts.module';
     ApplicationsModule,
     JobBookmarksModule,
     JobAlertsModule,
+    SavedCandidateModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}

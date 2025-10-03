@@ -56,17 +56,17 @@ export class QueryJobDto {
   @IsIn(['JUNIOR', 'MID', 'SENIOR', 'LEAD'])
   level?: JobLevel;
 
-@IsOptional()
-@Transform(({ value }) => {
-  if (Array.isArray(value)) return value;        // keep ?education[]=...
-  if (value == null || value === '') return undefined;
-  return String(value)
-    .split(',')                                   // support CSV too
-    .map(s => s.trim())
-    .filter(Boolean);
-})
-@IsArray()
-education?: string[];
+  @IsOptional()
+  @Transform(({ value }) => {
+    if (Array.isArray(value)) return value; // keep ?education[]=...
+    if (value == null || value === '') return undefined;
+    return String(value)
+      .split(',') // support CSV too
+      .map((s) => s.trim())
+      .filter(Boolean);
+  })
+  @IsArray()
+  education?: string[];
 
   // NEW: tags CSV (e.g. "react,vue,tailwind")
   @IsOptional()

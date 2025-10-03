@@ -2,6 +2,7 @@ import { Application } from 'src/applications/entities/application.entity';
 import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
 import { EmployerProfile } from 'src/employer-profile/entities/employer-profile.entity';
 import { Job } from 'src/jobs/entities/job.entity';
+import { SavedCandidate } from 'src/saved_candidate/entities/saved_candidate.entity';
 import {
   Entity,
   PrimaryGeneratedColumn,
@@ -46,6 +47,9 @@ export class User {
 
   @OneToMany(() => Job, (job) => job.employer)
   jobs: Job[];
+
+  @OneToMany(() => SavedCandidate, (e) => e.employer)
+  savedCandidates: SavedCandidate
 
   @OneToOne(() => EmployerProfile, (p) => p.user, { nullable: true })
   profile?: EmployerProfile;

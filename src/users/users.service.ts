@@ -35,7 +35,15 @@ export class UsersService {
 
   // NEW: return all users
   async findAll() {
-    return this.repo.find();
+    return this.repo.find({
+      relations: {
+        candidateProfile: {
+          resumes: true,
+          educations: true,
+          experiences: true,
+        },
+      },
+    });
   }
 
   async findByEmail(email: string) {
@@ -45,9 +53,9 @@ export class UsersService {
         candidateProfile: {
           resumes: true,
           educations: true,
-          experiences: true
-        }
-      }
+          experiences: true,
+        },
+      },
     });
   }
 
@@ -58,8 +66,8 @@ export class UsersService {
         candidateProfile: {
           resumes: true,
           educations: true,
-          experiences: true
-        }
+          experiences: true,
+        },
       },
     });
   }
