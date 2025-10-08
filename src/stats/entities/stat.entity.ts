@@ -1,6 +1,6 @@
 import { Entity, PrimaryGeneratedColumn, Column, Index, CreateDateColumn } from 'typeorm';
 
-@Entity('events_job_view')
+@Entity('overview')
 export class JobViewEvent {
   @PrimaryGeneratedColumn()
   id: number;
@@ -11,7 +11,7 @@ export class JobViewEvent {
 
   @Index()
   @Column('int')
-  tenantId: number;
+  tenantId: number | null;
 
   @Index()
   @Column({ type: 'varchar', length: 64, nullable: true })

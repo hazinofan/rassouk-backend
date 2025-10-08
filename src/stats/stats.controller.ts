@@ -1,17 +1,21 @@
-import { Controller, Get, Param, Query } from '@nestjs/common';
-import { EmployerOverviewResponseDto } from './dto/overview-response.dto';
-import { EmployerOverviewQueryDto } from './dto/create-stat.dto';
-import { AnalyticsService } from './stats.service';
+// src/stats/stats.controller.ts
+import { Controller, Get, Param, Query, UseInterceptors } from '@nestjs/common'
+import { EmployerOverviewQueryDto } from './dto/overview-query.dto'
+import { EmployerOverviewResponseDto } from './dto/overview-response.dto'
+import { CacheInterceptor } from '@nestjs/cache-manager'
+import { AnalyticsService } from './stats.service'
 
-@Controller('api/v1/employers/:tenantId/overview')
-export class AnalyticsController {
-  constructor(private readonly analytics: AnalyticsService) {}
+@UseInterceptors(CacheInterceptor)
+@Controller('employers/:tenantId/overview')
+export class StatsController {
+  constructor(private readonly stats: AnalyticsService) {}
 
   @Get()
-  async getEmployerOverview(
+  getOverview(
     @Param('tenantId') tenantId: string,
-    @Query() query: EmployerOverviewQueryDto,
+    @Query() q: EmployerOverviewQueryDto,
   ): Promise<EmployerOverviewResponseDto> {
-    return this.analytics.getEmployerOverview(Number(tenantId), query);
+    return this.stats.getEmployerOverview(Number(tenantId), q)
   }
+  
 }

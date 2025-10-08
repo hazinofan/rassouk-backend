@@ -6,17 +6,20 @@ import { JobClickEvent } from './entities/job-click-event.entity';
 import { JobViewEvent } from './entities/stat.entity';
 import { CacheModule } from '@nestjs/cache-manager';
 import { AnalyticsService } from './stats.service';
-import { AnalyticsController } from './stats.controller';
+import { StatsController } from './stats.controller';
+import { TrackController } from './track.controller';
+import { JobEvent } from './entities/job-view-event.entity';
+import { StatsSeriesController } from './stats-series.controller';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Job, Application, JobViewEvent, JobClickEvent]),
+    TypeOrmModule.forFeature([Job, Application,JobViewEvent, JobEvent, JobClickEvent]),
     CacheModule.register({
       ttl: 60, // seconds
       isGlobal: false,
     }),
   ],
-  controllers: [AnalyticsController],
+  controllers: [StatsController, TrackController, StatsSeriesController],
   providers: [AnalyticsService],
   exports: [AnalyticsService],
 })
