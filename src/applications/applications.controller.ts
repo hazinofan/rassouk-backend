@@ -41,8 +41,14 @@ export class ApplicationsController {
   }
 
   @Get('application/:id')
-  async findOne(@Param('id', ParseIntPipe) id:number) {
-    return this.service.getAppById(id)
+  async findOne(@Param('id', ParseIntPipe) id: number) {
+    return this.service.getAppById(id);
+  }
+
+  @Roles('candidat')
+  @Get('/me/applications')
+  myApps(@Req() req: any) {
+    return this.service.myApps(Number(req.user.id));
   }
 
   @Get(':slug/applications')
@@ -72,13 +78,7 @@ export class ApplicationsController {
     );
   }
 
-  @Roles('candidat')
-  @Get('/me/applications')
-  myApps(@Req() req: any) {
-    return this.service.myApps(Number(req.user.id));
-  }
-
-  @UseGuards(JwtAuthGuard) 
+  @UseGuards(JwtAuthGuard)
   @Get('jobs/:jobId/applications/me')
   async hasAppliedForJob(@Param('jobId') jobId: string, @Req() req: any) {
     const hasApplied = await this.service.hasApplied(+jobId, req.user.id);

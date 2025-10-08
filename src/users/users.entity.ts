@@ -57,6 +57,7 @@ export class User {
   @OneToOne(() => CandidateProfile, (p) => p.user, { nullable: true })
   candidateProfile?: CandidateProfile;
 
+  
   @Column({ type: 'int', default: 0 })
   onboardingStep: number; 
 
