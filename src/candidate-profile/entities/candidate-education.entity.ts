@@ -17,7 +17,7 @@ export class CandidateEducation {
   degree: string;
 
   @Column({ type: 'smallint' })
-  year: number;
+  year: number; 
 
   @Column({ length: 160, nullable: true })
   institution?: string;
