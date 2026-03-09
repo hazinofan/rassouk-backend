@@ -8,7 +8,7 @@ import { Application } from '../applications/entities/application.entity';
 import { JobClickEvent } from './entities/job-click-event.entity';
 import { JobEvent } from '../stats/entities/job-view-event.entity';
 import { addDays, endOfDay, startOfDay } from 'date-fns';
-import { EmployerOverviewQueryDto } from './dto/create-stat.dto';
+import { EmployerOverviewQueryDto } from './dto/overview-query.dto';
 import { TrackClickDto } from './dto/track-click.dto';
 import { TrackViewDto } from './dto/track-view.dto';
 
@@ -32,13 +32,32 @@ export class AnalyticsService {
     tenantId: number,
     query: EmployerOverviewQueryDto,
   ): Promise<EmployerOverviewResponseDto> {
-    const { from, to, range, tz = 'Africa/Casablanca' } = query;
+    const { from, to, range, tz = 'Africa/Casablanca', page = 1, limit = 30 } = query;
 
     const { fromDate, toDate } = this.resolveRange({ from, to, range });
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(365, Math.max(1, Number(limit) || 30));
+
+    const timeline = await this.getPerformanceTimeline(tenantId, query);
+    const totalItems = timeline.daily.length;
+    const totalPages = Math.max(1, Math.ceil(totalItems / safeLimit));
+    const fromIndex = (safePage - 1) * safeLimit;
+    const daily = timeline.daily.slice(fromIndex, fromIndex + safeLimit).map(d => ({
+      date: d.date,
+      views: d.views,
+      clicks: d.clicks,
+      ctr: d.ctr,
+    }));
+    const dailyPagination = {
+      page: safePage,
+      limit: safeLimit,
+      totalItems,
+      totalPages,
+    };
 
     // 1) Base jobs for this tenant
     const jobs = await this.jobsRepo.find({
-      //  where: { employerId: { id: tenantId } },
+      where: { employer: { id: tenantId } } as any,
       select: ['id', 'title', 'status', 'createdAt'],
     });
     const jobIds = jobs.map(j => j.id);
@@ -55,6 +74,8 @@ export class AnalyticsService {
         timeToFirstAppHours: 0,
         hires: 0,
         topJobs: [],
+        daily,
+        dailyPagination,
         generatedAt: new Date().toISOString(),
       };
     }
@@ -202,6 +223,8 @@ export class AnalyticsService {
       timeToFirstAppHours: Number(timeToFirstAppHours.toFixed(1)),
       hires,
       topJobs,
+      daily,
+      dailyPagination,
       generatedAt: new Date().toISOString(),
     };
   }
@@ -272,7 +295,7 @@ export class AnalyticsService {
 
     // Jobs of this tenant (adjust if you keep relation instead of employerId field)
     const jobs = await this.jobsRepo.find({
-      // where: { employerId: tenantId },
+      where: { employer: { id: tenantId } } as any,
       select: ['id', 'title'],
     });
     const jobIds = jobs.map(j => j.id);
@@ -328,7 +351,7 @@ export class AnalyticsService {
     const toStr = toDate.toISOString().slice(0, 10);
 
     const jobs = await this.jobsRepo.find({
-      // where: { employerId: tenantId },
+      where: { employer: { id: tenantId } } as any,
       select: ['id', 'title'],
     });
     const jobIds = jobs.map(j => j.id);
@@ -477,11 +500,12 @@ export class AnalyticsService {
 
     // ---- Aggregate APPLICATIONS per tenant (via Job) ----
     const appRows = await this.appsRepo.createQueryBuilder('a')
-      .innerJoin('a.job', 'j')              // adapt property name if different
-      .select('j.employerId', 'tenantId')   // or 'j.employer.id' if relation object
+      .innerJoin('a.job', 'j')
+      .innerJoin('j.employer', 'u')
+      .select('u.id', 'tenantId')
       .addSelect('COUNT(*)', 'apps')
       .where('a.createdAt BETWEEN :from AND :to', { from: fromDate, to: toDate })
-      .groupBy('j.employerId')
+      .groupBy('u.id')
       .getRawMany<{ tenantId: string; apps: string }>();
 
     // ---- Merge into map: tenantId -> {views, clicks, apps} ----
@@ -562,4 +586,136 @@ export class AnalyticsService {
     };
   }
 
+  private listDateBuckets(fromStr: string, toStr: string): string[] {
+    const out: string[] = [];
+    const cur = new Date(`${fromStr}T00:00:00.000Z`);
+    const end = new Date(`${toStr}T00:00:00.000Z`);
+    while (cur <= end) {
+      out.push(cur.toISOString().slice(0, 10));
+      cur.setUTCDate(cur.getUTCDate() + 1);
+    }
+    return out;
+  }
+
+  async getPerformanceTimeline(tenantId: number, query: EmployerOverviewQueryDto) {
+    const { fromDate, toDate } = this.resolveRange(query);
+    const fromStr = fromDate.toISOString().slice(0, 10);
+    const toStr = toDate.toISOString().slice(0, 10);
+
+    const jobs = await this.jobsRepo.find({
+      where: { employer: { id: tenantId } } as any,
+      select: ['id'],
+    });
+    const jobIds = jobs.map(j => j.id);
+    const dates = this.listDateBuckets(fromStr, toStr);
+
+    if (!jobIds.length) {
+      return {
+        total: { views: 0, clicks: 0, applications: 0, ctr: 0, conversionRate: 0 },
+        daily: dates.map(date => ({ date, views: 0, clicks: 0, applications: 0, ctr: 0, conversionRate: 0 })),
+        generatedAt: new Date().toISOString(),
+      };
+    }
+
+    const viewRows = await this.viewRepo.createQueryBuilder('e')
+      .select(`DATE_FORMAT(e.viewDate, '%Y-%m-%d')`, 'd')
+      .addSelect('COUNT(*)', 'c')
+      .where('e.tenantId = :tenantId', { tenantId })
+      .andWhere('e.jobId IN (:...jobIds)', { jobIds })
+      .andWhere('e.viewDate BETWEEN :from AND :to', { from: fromStr, to: toStr })
+      .groupBy('e.viewDate')
+      .getRawMany<{ d: string; c: string }>();
+
+    const clickRows = await this.clicksRepo.createQueryBuilder('e')
+      .select(`DATE_FORMAT(e.clickDate, '%Y-%m-%d')`, 'd')
+      .addSelect('COUNT(*)', 'c')
+      .where('e.tenantId = :tenantId', { tenantId })
+      .andWhere('e.jobId IN (:...jobIds)', { jobIds })
+      .andWhere('e.clickDate BETWEEN :from AND :to', { from: fromStr, to: toStr })
+      .groupBy('e.clickDate')
+      .getRawMany<{ d: string; c: string }>();
+
+    const appRows = await this.appsRepo.createQueryBuilder('a')
+      .select(`DATE_FORMAT(a.createdAt, '%Y-%m-%d')`, 'd')
+      .addSelect('COUNT(*)', 'c')
+      .where('a.jobId IN (:...jobIds)', { jobIds })
+      .andWhere('a.createdAt BETWEEN :from AND :to', { from: fromDate, to: toDate })
+      .groupBy(`DATE_FORMAT(a.createdAt, '%Y-%m-%d')`)
+      .getRawMany<{ d: string; c: string }>();
+
+    const vByDay = new Map(viewRows.map(r => [r.d, Number(r.c || 0)]));
+    const cByDay = new Map(clickRows.map(r => [r.d, Number(r.c || 0)]));
+    const aByDay = new Map(appRows.map(r => [r.d, Number(r.c || 0)]));
+
+    const daily = dates.map(date => {
+      const views = vByDay.get(date) || 0;
+      const clicks = cByDay.get(date) || 0;
+      const applications = aByDay.get(date) || 0;
+      return {
+        date,
+        views,
+        clicks,
+        applications,
+        ctr: views > 0 ? clicks / views : 0,
+        conversionRate: views > 0 ? applications / views : 0,
+      };
+    });
+
+    const totals = daily.reduce(
+      (acc, cur) => {
+        acc.views += cur.views;
+        acc.clicks += cur.clicks;
+        acc.applications += cur.applications;
+        return acc;
+      },
+      { views: 0, clicks: 0, applications: 0 },
+    );
+
+    return {
+      total: {
+        ...totals,
+        ctr: totals.views > 0 ? totals.clicks / totals.views : 0,
+        conversionRate: totals.views > 0 ? totals.applications / totals.views : 0,
+      },
+      daily,
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async getCategoryBreakdown(tenantId: number, query: EmployerOverviewQueryDto) {
+    const { fromDate, toDate } = this.resolveRange(query);
+    const fromStr = fromDate.toISOString().slice(0, 10);
+    const toStr = toDate.toISOString().slice(0, 10);
+
+    const rows = await this.viewRepo.createQueryBuilder('e')
+      .innerJoin(Job, 'j', 'j.id = e.jobId')
+      .select(`COALESCE(NULLIF(j.role, ''), 'Non classe')`, 'category')
+      .addSelect('COUNT(*)', 'c')
+      .where('e.tenantId = :tenantId', { tenantId })
+      .andWhere('e.viewDate BETWEEN :from AND :to', { from: fromStr, to: toStr })
+      .groupBy(`COALESCE(NULLIF(j.role, ''), 'Non classe')`)
+      .orderBy('c', 'DESC')
+      .getRawMany<{ category: string; c: string }>();
+
+    const items = rows.map(r => ({
+      label: r.category,
+      count: Number(r.c || 0),
+    }));
+
+    return {
+      items,
+      top: items.slice(0, 6),
+      generatedAt: new Date().toISOString(),
+    };
+  }
+
+  async getRecentActivity(tenantId: number, query: EmployerOverviewQueryDto) {
+    const timeline = await this.getPerformanceTimeline(tenantId, query);
+    const items = timeline.daily.slice(-10).reverse();
+    return {
+      items,
+      total: timeline.total,
+      generatedAt: new Date().toISOString(),
+    };
+  }
 }

@@ -1,14 +1,17 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import { CacheModule } from '@nestjs/cache-manager';
 import { StatsController } from './stats.controller';
-import { StatsService } from './stats.service';
+import { AnalyticsService } from './stats.service';
 
 describe('StatsController', () => {
   let controller: StatsController;
+  const analyticsMock = { getEmployerOverview: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
+      imports: [CacheModule.register()],
       controllers: [StatsController],
-      providers: [StatsService],
+      providers: [{ provide: AnalyticsService, useValue: analyticsMock }],
     }).compile();
 
     controller = module.get<StatsController>(StatsController);

@@ -1,0 +1,143 @@
+{
+  "info": {
+    "name": "Rassouk Backend - Stats Extra",
+    "_postman_id": "8f97753f-1f0b-4fe6-a6da-e67c37358577",
+    "description": "Extra stats endpoints for timeline, categories, and recent activity.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Timeline (views/clicks/apps/ctr)",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/timeline?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "timeline"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.response.to.have.status(200);",
+              "const json = pm.response.json();",
+              "pm.expect(json).to.have.property('daily');",
+              "pm.expect(json.daily).to.be.an('array');",
+              "if (json.daily.length > 0) {",
+              "  pm.expect(json.daily[0]).to.have.property('views');",
+              "  pm.expect(json.daily[0]).to.have.property('clicks');",
+              "  pm.expect(json.daily[0]).to.have.property('applications');",
+              "  pm.expect(json.daily[0]).to.have.property('ctr');",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories Breakdown",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/categories?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "categories"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.response.to.have.status(200);",
+              "const json = pm.response.json();",
+              "pm.expect(json).to.have.property('items');",
+              "pm.expect(json).to.have.property('top');",
+              "pm.expect(json.items).to.be.an('array');",
+              "pm.expect(json.top).to.be.an('array');"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "Recent Activity",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/recent-activity?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "recent-activity"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.response.to.have.status(200);",
+              "const json = pm.response.json();",
+              "pm.expect(json).to.have.property('items');",
+              "pm.expect(json.items).to.be.an('array');",
+              "pm.expect(json).to.have.property('total');"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "tenantId",
+      "value": "1"
+    }
+  ]
+}
