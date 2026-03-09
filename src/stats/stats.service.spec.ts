@@ -1,15 +1,28 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { StatsService } from './stats.service';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { AnalyticsService } from './stats.service';
+import { Job } from '../jobs/entities/job.entity';
+import { Application } from '../applications/entities/application.entity';
+import { JobEvent } from './entities/job-view-event.entity';
+import { JobClickEvent } from './entities/job-click-event.entity';
 
-describe('StatsService', () => {
-  let service: StatsService;
+describe('AnalyticsService', () => {
+  let service: AnalyticsService;
+
+  const repoMock = { find: jest.fn(), createQueryBuilder: jest.fn(), insert: jest.fn() };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      providers: [StatsService],
+      providers: [
+        AnalyticsService,
+        { provide: getRepositoryToken(Job), useValue: repoMock },
+        { provide: getRepositoryToken(Application), useValue: repoMock },
+        { provide: getRepositoryToken(JobEvent), useValue: repoMock },
+        { provide: getRepositoryToken(JobClickEvent), useValue: repoMock },
+      ],
     }).compile();
 
-    service = module.get<StatsService>(StatsService);
+    service = module.get<AnalyticsService>(AnalyticsService);
   });
 
   it('should be defined', () => {

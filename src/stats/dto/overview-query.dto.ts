@@ -1,4 +1,4 @@
-import { IsIn, IsISO8601, IsOptional, IsString } from 'class-validator';
+import { IsIn, IsISO8601, IsOptional, IsString, Min, Max, IsInt } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class EmployerOverviewQueryDto {
@@ -18,4 +18,17 @@ export class EmployerOverviewQueryDto {
   @IsString()
   @Transform(({ value }) => value || 'Africa/Casablanca')
   tz?: string = 'Africa/Casablanca';
+
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? 1 : Number(value)))
+  @IsInt()
+  @Min(1)
+  page?: number = 1;
+
+  @IsOptional()
+  @Transform(({ value }) => (value === undefined ? 30 : Number(value)))
+  @IsInt()
+  @Min(1)
+  @Max(365)
+  limit?: number = 30;
 }

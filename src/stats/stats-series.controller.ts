@@ -37,4 +37,28 @@ export class StatsSeriesController {
     ) {
         return this.analytics.getVisibilityScore(Number(tenantId), q);
     }
+
+    @Get('timeline')
+    getTimeline(
+        @Param('tenantId') tenantId: string,
+        @Query() q: EmployerOverviewQueryDto
+    ) {
+        return this.analytics.getPerformanceTimeline(Number(tenantId), q);
+    }
+
+    @Get('categories')
+    getCategories(
+        @Param('tenantId') tenantId: string,
+        @Query() q: EmployerOverviewQueryDto
+    ) {
+        return this.analytics.getCategoryBreakdown(Number(tenantId), q);
+    }
+
+    @Get('recent-activity')
+    getRecentActivity(
+        @Param('tenantId') tenantId: string,
+        @Query() q: EmployerOverviewQueryDto
+    ) {
+        return this.analytics.getRecentActivity(Number(tenantId), q);
+    }
 }

@@ -1,0 +1,330 @@
+{
+  "info": {
+    "name": "Rassouk Backend - Stats",
+    "_postman_id": "a5afec1a-e3e2-4755-8c73-8c98f7f1a1a2",
+    "description": "Stats and tracking endpoints smoke tests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 - Track View",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jobId\": {{jobId}},\n  \"tenantId\": {{tenantId}},\n  \"sessionId\": \"pm-session-{{$timestamp}}\",\n  \"source\": \"postman\",\n  \"referrer\": \"https://postman.local\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/track/view",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "track",
+            "view"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201/200', function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('ok=true', function () {",
+              "  pm.expect(json.ok).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "02 - Track Click Apply",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"jobId\": {{jobId}},\n  \"tenantId\": {{tenantId}},\n  \"sessionId\": \"pm-session-{{$timestamp}}\",\n  \"source\": \"postman\"\n}"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/track/click-apply",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "track",
+            "click-apply"
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 201/200', function () {",
+              "  pm.expect([200, 201]).to.include(pm.response.code);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('ok=true', function () {",
+              "  pm.expect(json.ok).to.eql(true);",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "03 - Employer Overview",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/overview?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "overview"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Overview shape', function () {",
+              "  pm.expect(json).to.have.property('views');",
+              "  pm.expect(json).to.have.property('clicks');",
+              "  pm.expect(json).to.have.property('applications');",
+              "  pm.expect(json).to.have.property('topJobs');",
+              "  pm.expect(json.topJobs).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "04 - Views Stats",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/views?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "views"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Views stats shape', function () {",
+              "  pm.expect(json).to.have.property('total');",
+              "  pm.expect(json).to.have.property('daily');",
+              "  pm.expect(json).to.have.property('byJob');",
+              "  pm.expect(json.daily).to.be.an('array');",
+              "  pm.expect(json.byJob).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "05 - Clicks Stats",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/clicks?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "clicks"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Clicks stats shape', function () {",
+              "  pm.expect(json).to.have.property('total');",
+              "  pm.expect(json).to.have.property('daily');",
+              "  pm.expect(json).to.have.property('byJob');",
+              "  pm.expect(json.daily).to.be.an('array');",
+              "  pm.expect(json.byJob).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "06 - Sources Stats",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/sources?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "sources"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Sources shape', function () {",
+              "  pm.expect(json).to.have.property('items');",
+              "  pm.expect(json.items).to.be.an('array');",
+              "});"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "07 - Visibility Score",
+      "request": {
+        "method": "GET",
+        "url": {
+          "raw": "{{baseUrl}}/employers/{{tenantId}}/stats/visibility?range=30d",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "employers",
+            "{{tenantId}}",
+            "stats",
+            "visibility"
+          ],
+          "query": [
+            {
+              "key": "range",
+              "value": "30d"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Status 200', function () {",
+              "  pm.response.to.have.status(200);",
+              "});",
+              "const json = pm.response.json();",
+              "pm.test('Visibility shape', function () {",
+              "  pm.expect(json).to.have.property('employer');",
+              "  pm.expect(json).to.have.property('market');",
+              "  pm.expect(json).to.have.property('percentile');",
+              "  pm.expect(json.percentile).to.have.property('overallScore');",
+              "});"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000"
+    },
+    {
+      "key": "tenantId",
+      "value": "1"
+    },
+    {
+      "key": "jobId",
+      "value": "1"
+    }
+  ]
+}
