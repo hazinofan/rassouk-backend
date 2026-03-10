@@ -9,6 +9,7 @@ import {
   Patch,
   Post,
   BadRequestException,
+  Query,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 
@@ -42,6 +43,20 @@ export class UsersController {
   async findAll() {
     const list = await this.users.findAll();
     return list.map((u) => this.strip(u));
+  }
+
+  // GET /users/employers?page=1&limit=12&sort=latest
+  @Get('employers')
+  async findEmployers(
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+    @Query('sort') sort?: string,
+  ) {
+    return this.users.findEmployers({
+      page: Number(page),
+      limit: Number(limit),
+      sort,
+    });
   }
 
   // GET /users/:id

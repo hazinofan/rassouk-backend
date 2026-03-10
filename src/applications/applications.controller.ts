@@ -41,8 +41,8 @@ export class ApplicationsController {
   }
 
   @Get('application/:id')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.service.getAppById(id);
+  async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
+    return this.service.getAppById(id, req.user);
   }
 
   @Roles('candidat')

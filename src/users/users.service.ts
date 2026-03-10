@@ -3,12 +3,17 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { User } from './users.entity';
 import * as bcrypt from 'bcrypt';
+import { EmployerProfile } from 'src/employer-profile/entities/employer-profile.entity';
 
 export type UserRole = 'admin' | 'candidat' | 'employer';
 
 @Injectable()
 export class UsersService {
-  constructor(@InjectRepository(User) private repo: Repository<User>) {}
+  constructor(
+    @InjectRepository(User) private repo: Repository<User>,
+    @InjectRepository(EmployerProfile)
+    private employerProfilesRepo: Repository<EmployerProfile>,
+  ) {}
 
   // keep your old create
   async create(data: DeepPartial<User>) {
@@ -109,5 +114,57 @@ export class UsersService {
   // NEW: remove user
   async remove(userId: number) {
     await this.repo.delete(userId);
+  }
+
+  async findEmployers(params: {
+    page?: number;
+    limit?: number;
+    sort?: string;
+  }) {
+    const page = Math.max(1, Number(params.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(params.limit) || 12));
+    const sort = params.sort === 'oldest' ? 'oldest' : 'latest';
+    const skip = (page - 1) * limit;
+
+    const qb = this.repo
+      .createQueryBuilder('user')
+      .leftJoinAndSelect('user.profile', 'profile')
+      .where('user.role = :role', { role: 'employer' })
+      .orderBy('user.createdAt', sort === 'oldest' ? 'ASC' : 'DESC')
+      .skip(skip)
+      .take(limit);
+
+    const [items, total] = await qb.getManyAndCount();
+
+    const data = items.map((user) => ({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      createdAt: user.createdAt,
+      updatedAt: user.updatedAt,
+      isOnboarded: user.isOnboarded,
+      onboardingStep: user.onboardingStep,
+      profile: user.profile
+        ? {
+            userId: user.profile.userId,
+            companyName: user.profile.companyName,
+            logoUrl: user.profile.logoUrl,
+            bannerUrl: user.profile.bannerUrl,
+            city: user.profile.city,
+            industryType: user.profile.industryType,
+            organizationType: user.profile.organizationType,
+            websiteUrl: user.profile.websiteUrl,
+          }
+        : null,
+    }));
+
+    return {
+      data,
+      total,
+      page,
+      limit,
+      pageCount: Math.ceil(total / limit),
+    };
   }
 }

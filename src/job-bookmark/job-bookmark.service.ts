@@ -3,12 +3,14 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { JobBookmark } from './entities/job-bookmark.entity';
+import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
 @Injectable()
 export class JobBookmarksService {
   constructor(
     @InjectRepository(JobBookmark)
     private readonly repo: Repository<JobBookmark>,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   private assertIds(userId: number, jobId: number) {
@@ -22,6 +24,12 @@ export class JobBookmarksService {
 
   async add(userId: number, jobId: number) {
     this.assertIds(userId, jobId);
+    const current = await this.repo.count({ where: { userId } });
+    await this.entitlements.assertCandidateLimit(
+      userId,
+      'max_saved_jobs',
+      current,
+    );
     await this.repo
       .createQueryBuilder()
       .insert()

@@ -10,14 +10,18 @@ import { StatsController } from './stats.controller';
 import { TrackController } from './track.controller';
 import { JobEvent } from './entities/job-view-event.entity';
 import { StatsSeriesController } from './stats-series.controller';
+import { AuthModule } from 'src/auth/auth.module';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Job, Application,JobViewEvent, JobEvent, JobClickEvent]),
+    TypeOrmModule.forFeature([Job, Application, JobViewEvent, JobEvent, JobClickEvent]),
     CacheModule.register({
       ttl: 60, // seconds
       isGlobal: false,
     }),
+    AuthModule,
+    SubscriptionsModule,
   ],
   controllers: [StatsController, TrackController, StatsSeriesController],
   providers: [AnalyticsService],

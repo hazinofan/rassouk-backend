@@ -4,8 +4,11 @@ import {
 } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
 import { JobBookmarksService } from './job-bookmark.service';
+import { RolesGuard } from 'src/auth/decorators/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('candidat')
 @Controller()
 export class JobBookmarksController {
   constructor(private readonly svc: JobBookmarksService) {}

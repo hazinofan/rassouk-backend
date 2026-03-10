@@ -6,9 +6,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DeepPartial,
-  ILike,
-  LessThanOrEqual,
-  MoreThanOrEqual,
+  Not,
   Repository,
 } from 'typeorm';
 import { CreateJobDto } from './dto/create-job.dto';
@@ -17,6 +15,7 @@ import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
 import { Job, JobStatus, JobType } from './entities/job.entity';
 import { ApplicationStatus } from 'src/applications/entities/application.entity';
+import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
 function parseSalary(label?: string): { min?: number; max?: number } {
   if (!label) return {};
@@ -79,7 +78,10 @@ function isNonEmptyArray<T>(v: T[] | undefined | null): v is T[] {
 
 @Injectable()
 export class JobsService {
-  constructor(@InjectRepository(Job) private repo: Repository<Job>) {}
+  constructor(
+    @InjectRepository(Job) private repo: Repository<Job>,
+    private readonly entitlements: EntitlementsService,
+  ) {}
 
   private makeSlug(title: string) {
     const base = slugify(title, { lower: true, strict: true, trim: true });
@@ -100,6 +102,13 @@ export class JobsService {
   }
 
   async create(dto: CreateJobDto, employerId: number) {
+    const activeJobs = await this.countActiveJobs(employerId);
+    await this.entitlements.assertEmployerLimit(
+      employerId,
+      'max_active_jobs',
+      activeJobs,
+    );
+
     if (
       dto.minSalary &&
       dto.maxSalary &&
@@ -376,7 +385,26 @@ export class JobsService {
     // Only touch status
     if (job.status === status) return job;
 
+    if (status === JobStatus.ACTIVE) {
+      const activeJobs = await this.countActiveJobs(employerId, job.id);
+      await this.entitlements.assertEmployerLimit(
+        employerId,
+        'max_active_jobs',
+        activeJobs,
+      );
+    }
+
     job.status = status;
     return this.repo.save(job);
+  }
+
+  private countActiveJobs(employerId: number, excludeJobId?: number) {
+    return this.repo.count({
+      where: {
+        employer: { id: employerId },
+        status: JobStatus.ACTIVE,
+        ...(excludeJobId ? { id: Not(excludeJobId) } : {}),
+      },
+    });
   }
 }

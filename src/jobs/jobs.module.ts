@@ -5,9 +5,10 @@ import { JobsService } from './jobs.service';
 import { JobsController } from './jobs.controller';
 import { Job } from './entities/job.entity';
 import { AuthModule } from 'src/auth/auth.module';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Job]), AuthModule],
+  imports: [TypeOrmModule.forFeature([Job]), AuthModule, SubscriptionsModule],
   controllers: [JobsController],
   providers: [JobsService],
   exports: [JobsService], 

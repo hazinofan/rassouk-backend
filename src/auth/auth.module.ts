@@ -8,6 +8,7 @@ import { MailModule } from 'src/mail/mail.module';
 import { JwtModule } from '@nestjs/jwt';
 import { ConfigModule } from '@nestjs/config';
 import { JwtAuthGuard } from './guards/jwt.guard';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { JwtAuthGuard } from './guards/jwt.guard';
     UsersModule,
     MailModule,
     ConfigModule,
-    JwtModule.register({}) 
+    JwtModule.register({}),
+    SubscriptionsModule,
   ],
   providers: [AuthService, JwtAuthGuard],
   controllers: [AuthController],

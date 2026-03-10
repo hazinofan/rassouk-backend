@@ -8,9 +8,15 @@ import { Job } from 'src/jobs/entities/job.entity';
 import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
 import { AuthModule } from 'src/auth/auth.module';
 import { MailModule } from 'src/mail/mail.module';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Application, Job, CandidateProfile]), AuthModule, MailModule],
+  imports: [
+    TypeOrmModule.forFeature([Application, Job, CandidateProfile]),
+    AuthModule,
+    MailModule,
+    SubscriptionsModule,
+  ],
   controllers: [ApplicationsController],
   providers: [ApplicationsService, RolesGuard],
   exports: [ApplicationsService]

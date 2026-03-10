@@ -12,6 +12,7 @@ import { CreateEducationDto } from './dto/create-education.dto';
 import { UpdateEducationDto } from './dto/update-education.dto';
 import { AddResumeDto } from './dto/add-resume.dto';
 import { QueryCandidatesDto } from './dto/query-candidates.dto';
+import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
 @Injectable()
 export class CandidateProfilesService {
@@ -20,6 +21,7 @@ export class CandidateProfilesService {
     @InjectRepository(CandidateExperience) private exps: Repository<CandidateExperience>,
     @InjectRepository(CandidateEducation) private edus: Repository<CandidateEducation>,
     @InjectRepository(CandidateResume) private resumes: Repository<CandidateResume>,
+    private readonly entitlements: EntitlementsService,
   ) { }
 
   async getMine(userId: number) {
@@ -86,6 +88,12 @@ export class CandidateProfilesService {
 
   // Resumes
   async addResume(userId: number, dto: AddResumeDto) {
+    const current = await this.resumes.count({ where: { userId } });
+    await this.entitlements.assertCandidateLimit(
+      userId,
+      'max_stored_cvs',
+      current,
+    );
     const r = this.resumes.create({ userId, ...dto });
     return this.resumes.save(r);
   }

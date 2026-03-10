@@ -6,11 +6,13 @@ import { JobBookmark } from './entities/job-bookmark.entity';
 import { JobBookmarksController } from './job-bookmark.controller';
 import { JobBookmarksService } from './job-bookmark.service';
 import { AuthModule } from 'src/auth/auth.module';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
     TypeOrmModule.forFeature([JobBookmark, Job]),
-    AuthModule
+    AuthModule,
+    SubscriptionsModule,
   ],
   controllers: [JobBookmarksController],
   providers: [JobBookmarksService],

@@ -14,12 +14,16 @@ import { LoginDto } from './dto/login.dto';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt.guard';
+import { UsersService } from 'src/users/users.service';
+import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
 @Controller('auth')
 export class AuthController {
   constructor(
     private authService: AuthService,
     private cfg: ConfigService,
+    private usersService: UsersService,
+    private entitlements: EntitlementsService,
   ) {}
 
   @Post('signup')
@@ -139,7 +143,19 @@ export class AuthController {
 
   @UseGuards(JwtAuthGuard)
   @Get('me')
-  me(@Req() req: Request & { user?: any }) {
-    return req.user;
+  async me(@Req() req: Request & { user?: any }) {
+    const userId = Number(req.user?.id);
+    const user = await this.usersService.findById(userId);
+    const billing = await this.entitlements.getBillingSnapshot(userId);
+
+    return {
+      id: user?.id ?? req.user?.id,
+      email: user?.email ?? req.user?.email,
+      role: user?.role ?? req.user?.role,
+      name: user?.name ?? req.user?.name,
+      isOnboarded: user?.isOnboarded ?? req.user?.isOnboarded,
+      onboardingStep: user?.onboardingStep ?? 0,
+      billing,
+    };
   }
 }

@@ -12,6 +12,7 @@ import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profi
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { MailService } from 'src/mail/mail.service';
 import { QueryApplicationsDto } from './dto/query-applications.dto';
+import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
 @Injectable()
 export class ApplicationsService {
@@ -21,9 +22,22 @@ export class ApplicationsService {
     @InjectRepository(CandidateProfile)
     private profRepo: Repository<CandidateProfile>,
     private mail: MailService,
+    private readonly entitlements: EntitlementsService,
   ) {}
 
   async create(jobId: number, candidateId: number, dto: CreateApplicationDto) {
+    const currentMonthApplications = await this.appRepo.count({
+      where: {
+        candidate: { id: candidateId },
+        createdAt: this.entitlements.getMonthBetweenClause(),
+      },
+    });
+    await this.entitlements.assertCandidateLimit(
+      candidateId,
+      'max_applications_per_month',
+      currentMonthApplications,
+    );
+
     const job = await this.jobRepo.findOne({
       where: { id: jobId },
       relations: ['employer', 'employer.profile'],
@@ -92,19 +106,32 @@ export class ApplicationsService {
     return saved;
   }
 
-  async getAppById (id: number) {
-    return this.appRepo.findOne({
+  async getAppById(id: number, requester: { id: number; role: string }) {
+    const app = await this.appRepo.findOne({
       where: { id },
       relations: {
         candidate: {
           candidateProfile: {
+            resumes: true,
             experiences: true,
-            educations: true
-          }
+            educations: true,
+          },
         },
-        job: true
-      }
-    })
+        job: {
+          employer: true,
+        },
+      },
+    });
+
+    if (!app) throw new NotFoundException('Application not found');
+
+    const isCandidateOwner = app.candidate?.id === requester.id;
+    const isEmployerOwner = app.employerId === requester.id;
+    if (!isCandidateOwner && !isEmployerOwner) {
+      throw new ForbiddenException('You do not own this application');
+    }
+
+    return isEmployerOwner ? this.maskApplicationCvIfNeeded(app) : app;
   }
 
   async updateStatusForEmployer(
@@ -151,7 +178,9 @@ export class ApplicationsService {
 
     if (!job) throw new NotFoundException('Job not found or not owned by you');
 
-    return job.applications;
+    return Promise.all(
+      job.applications.map((app) => this.maskApplicationCvIfNeeded(app)),
+    );
   }
 
   myApps(candidateId: number) {
@@ -218,6 +247,63 @@ export class ApplicationsService {
     }
 
     const [data, total] = await qb.getManyAndCount();
-    return { data, total, page, limit };
+    const masked = await Promise.all(
+      data.map((app) => this.maskApplicationCvIfNeeded(app)),
+    );
+    return { data: masked, total, page, limit };
+  }
+
+  private async maskApplicationCvIfNeeded(app: Application) {
+    const entitlements = await this.entitlements.getEmployerEntitlements(
+      Number(app.employerId),
+    );
+    const canAccessCv =
+      entitlements.status === 'active' &&
+      this.isCvWindowOpen(
+        entitlements.startedAt,
+        entitlements.limits.cv_access_days,
+      );
+
+    if (canAccessCv) {
+      return app;
+    }
+
+    return {
+      ...app,
+      resumeUrl: null,
+      cvLocked: true,
+      candidate: app.candidate
+        ? {
+            ...app.candidate,
+            candidateProfile: app.candidate.candidateProfile
+              ? {
+                  ...app.candidate.candidateProfile,
+                  resumes: (app.candidate.candidateProfile.resumes ?? []).map(
+                    (resume: any) => ({
+                      ...resume,
+                      filePath: null,
+                      url: null,
+                      locked: true,
+                    }),
+                  ),
+                }
+              : app.candidate.candidateProfile,
+          }
+        : app.candidate,
+    };
+  }
+
+  private isCvWindowOpen(
+    startedAt: Date | null,
+    cvAccessDays: number | null,
+  ) {
+    if (!startedAt || cvAccessDays === null || cvAccessDays <= 0) {
+      return false;
+    }
+
+    const cutoff = new Date(
+      startedAt.getTime() + cvAccessDays * 24 * 60 * 60 * 1000,
+    );
+    return cutoff >= new Date();
   }
 }

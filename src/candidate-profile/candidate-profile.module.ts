@@ -8,6 +8,7 @@ import { CandidateProfilesService } from './candidate-profile.service';
 import { CandidateProfilesController } from './candidate-profile.controller';
 import { AuthModule } from 'src/auth/auth.module';
 import { RolesGuard } from 'src/auth/decorators/roles.guard';
+import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { RolesGuard } from 'src/auth/decorators/roles.guard';
       CandidateResume,
     ]),
     AuthModule, // brings JwtService + JwtAuthGuard (exported)
+    SubscriptionsModule,
   ],
   providers: [CandidateProfilesService, RolesGuard],
   controllers: [CandidateProfilesController],

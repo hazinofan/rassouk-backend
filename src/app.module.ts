@@ -13,6 +13,7 @@ import { JobBookmarksModule } from './job-bookmark/job-bookmark.module';
 import { JobAlertsModule } from './alerts/alerts.module';
 import { SavedCandidateModule } from './saved_candidate/saved_candidate.module';
 import { AnalyticsModule } from './stats/stats.module';
+import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 
 @Module({
   imports: [
@@ -44,6 +45,7 @@ import { AnalyticsModule } from './stats/stats.module';
     JobAlertsModule,
     SavedCandidateModule,
     AnalyticsModule,
+    SubscriptionsModule,
   ],
 })
 export class AppModule {}

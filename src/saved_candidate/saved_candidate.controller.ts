@@ -1,9 +1,12 @@
 import { Controller, Post, Get, Delete, Param, Req, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
 import { SavedCandidatesService } from './saved_candidate.service';
+import { RolesGuard } from 'src/auth/decorators/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
 
 @Controller('saved-candidates')
-@UseGuards(JwtAuthGuard) // only logged-in employers
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles('employer')
 export class SavedCandidatesController {
   constructor(private service: SavedCandidatesService) {}
 
