@@ -14,10 +14,13 @@ import { JobAlertsModule } from './alerts/alerts.module';
 import { SavedCandidateModule } from './saved_candidate/saved_candidate.module';
 import { AnalyticsModule } from './stats/stats.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
+import { NotificationsModule } from './notifications/notifications.module';
+import { ScheduleModule } from '@nestjs/schedule';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRootAsync({
       inject: [ConfigService],
       useFactory: (config: ConfigService) => ({
@@ -46,6 +49,7 @@ import { SubscriptionsModule } from './subscriptions/subscriptions.module';
     SavedCandidateModule,
     AnalyticsModule,
     SubscriptionsModule,
+    NotificationsModule,
   ],
 })
 export class AppModule {}

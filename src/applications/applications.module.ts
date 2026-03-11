@@ -9,6 +9,7 @@ import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profi
 import { AuthModule } from 'src/auth/auth.module';
 import { MailModule } from 'src/mail/mail.module';
 import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
+import { NotificationsModule } from 'src/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { SubscriptionsModule } from 'src/subscriptions/subscriptions.module';
     AuthModule,
     MailModule,
     SubscriptionsModule,
+    NotificationsModule,
   ],
   controllers: [ApplicationsController],
   providers: [ApplicationsService, RolesGuard],

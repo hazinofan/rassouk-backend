@@ -13,6 +13,8 @@ import { CreateApplicationDto } from './dto/create-application.dto';
 import { MailService } from 'src/mail/mail.service';
 import { QueryApplicationsDto } from './dto/query-applications.dto';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
+import { NotificationsService } from 'src/notifications/notifications.service';
+import { NotificationType } from 'src/notifications/entities/notification.entity';
 
 @Injectable()
 export class ApplicationsService {
@@ -23,6 +25,7 @@ export class ApplicationsService {
     private profRepo: Repository<CandidateProfile>,
     private mail: MailService,
     private readonly entitlements: EntitlementsService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   async create(jobId: number, candidateId: number, dto: CreateApplicationDto) {
@@ -103,6 +106,21 @@ export class ApplicationsService {
       );
     }
 
+    if (employerId) {
+      await this.notifications.create({
+        userId: employerId,
+        type: NotificationType.NEW_APPLICATION,
+        title: 'New application received',
+        message: `${profile.user?.name ?? 'A candidate'} applied to "${job.title}"`,
+        payload: {
+          applicationId: saved.id,
+          jobId: job.id,
+          jobSlug: job.slug,
+          candidateId,
+        },
+      });
+    }
+
     return saved;
   }
 
@@ -139,10 +157,14 @@ export class ApplicationsService {
     employerId: number,
     next: ApplicationStatus,
   ) {
-    const app = await this.appRepo.findOne({ where: { id: appId } });
+    const app = await this.appRepo.findOne({
+      where: { id: appId },
+      relations: ['candidate', 'job'],
+    });
     if (!app) throw new NotFoundException('Application not found');
     if (app.employerId !== employerId)
       throw new ForbiddenException('You do not own this application');
+    if (app.status === next) return { id: app.id, status: app.status };
 
     const order: Record<ApplicationStatus, number> = {
       SUBMITTED: 1,
@@ -167,6 +189,22 @@ export class ApplicationsService {
 
     app.status = next;
     await this.appRepo.save(app);
+
+    if (app.candidate?.id) {
+      await this.notifications.create({
+        userId: app.candidate.id,
+        type: NotificationType.APPLICATION_STATUS_CHANGED,
+        title: 'Application update',
+        message: `Your application for "${app.job?.title ?? 'a job'}" is now ${next.toLowerCase()}.`,
+        payload: {
+          applicationId: app.id,
+          jobId: app.job?.id,
+          jobSlug: (app.job as any)?.slug,
+          status: next,
+        },
+      });
+    }
+
     return { id: app.id, status: app.status };
   }
 

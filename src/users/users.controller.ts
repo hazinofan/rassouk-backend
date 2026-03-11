@@ -1,6 +1,7 @@
 // src/users/users.controller.ts
 import {
   Body,
+  BadRequestException,
   Controller,
   Delete,
   Get,
@@ -8,10 +9,14 @@ import {
   ParseIntPipe,
   Patch,
   Post,
-  BadRequestException,
   Query,
+  UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
+import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
+import { RolesGuard } from 'src/auth/decorators/roles.guard';
+import { Roles } from 'src/auth/decorators/roles.decorator';
+import { QueryEmployersDto } from './dto/query-employers.dto';
 
 @Controller('users')
 export class UsersController {
@@ -45,18 +50,12 @@ export class UsersController {
     return list.map((u) => this.strip(u));
   }
 
-  // GET /users/employers?page=1&limit=12&sort=latest
-  @Get('employers')
-  async findEmployers(
-    @Query('page') page?: string,
-    @Query('limit') limit?: string,
-    @Query('sort') sort?: string,
-  ) {
-    return this.users.findEmployers({
-      page: Number(page),
-      limit: Number(limit),
-      sort,
-    });
+  // GET /users/employers (alias: /users/emplyers)
+  @Get(['employers', 'emplyers'])
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('candidat')
+  async findEmployers(@Query() query: QueryEmployersDto) {
+    return this.users.findEmployers(query);
   }
 
   // GET /users/:id

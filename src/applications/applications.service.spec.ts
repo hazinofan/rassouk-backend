@@ -7,6 +7,7 @@ import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profi
 import { MailService } from 'src/mail/mail.service';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 import { ForbiddenException } from '@nestjs/common';
+import { NotificationsService } from 'src/notifications/notifications.service';
 
 describe('ApplicationsService', () => {
   let service: ApplicationsService;
@@ -17,6 +18,7 @@ describe('ApplicationsService', () => {
   const jobRepo = {};
   const profileRepo = {};
   const mail = {};
+  const notifications = {};
   const entitlements = {
     getMonthBetweenClause: jest.fn(),
     assertCandidateLimit: jest.fn(),
@@ -32,6 +34,7 @@ describe('ApplicationsService', () => {
         { provide: getRepositoryToken(Job), useValue: jobRepo },
         { provide: getRepositoryToken(CandidateProfile), useValue: profileRepo },
         { provide: MailService, useValue: mail },
+        { provide: NotificationsService, useValue: notifications },
         { provide: EntitlementsService, useValue: entitlements },
       ],
     }).compile();

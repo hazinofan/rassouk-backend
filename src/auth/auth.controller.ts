@@ -50,7 +50,7 @@ export class AuthController {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', // true in prod (HTTPS)
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 15, // 15 min
+      maxAge: 1000 * 60 * 60 * 6, // 6 hours
       path: '/',
     });
 
@@ -118,7 +118,7 @@ export class AuthController {
       httpOnly: true,
       secure: true,
       sameSite: 'lax',
-      maxAge: 1000 * 60 * 15,
+      maxAge: 1000 * 60 * 60 * 6, // 6 hours
       path: '/',
     });
 

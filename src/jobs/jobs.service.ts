@@ -13,7 +13,7 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
-import { Job, JobStatus, JobType } from './entities/job.entity';
+import { Job, JobLevel, JobStatus, JobType } from './entities/job.entity';
 import { ApplicationStatus } from 'src/applications/entities/application.entity';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
@@ -154,9 +154,15 @@ export class JobsService {
 
     // Free-text (MySQL case-insensitive)
     if (q && q.trim()) {
-      qb.andWhere('LOWER(job.title) LIKE :q', {
-        q: `%${q.trim().toLowerCase()}%`,
-      });
+      const term = `%${q.trim().toLowerCase()}%`;
+      qb.andWhere(
+        `(
+          LOWER(job.title) LIKE :q
+          OR LOWER(COALESCE(job.description, '')) LIKE :q
+          OR LOWER(COALESCE(job.responsibilities, '')) LIKE :q
+        )`,
+        { q: term },
+      );
     }
 
     // Role
@@ -166,9 +172,33 @@ export class JobsService {
       });
     }
 
-    // Level (enum)
-    if (level) {
-      qb.andWhere('job.jobLevel = :level', { level });
+    const toArray = (v: unknown): string[] => {
+      if (Array.isArray(v)) {
+        return v
+          .flatMap((item) => String(item).split(','))
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      if (typeof v === 'string' && v.trim().length) {
+        // support CSV like ?level=JUNIOR,MID
+        return v
+          .split(',')
+          .map((s) => s.trim())
+          .filter(Boolean);
+      }
+      return [];
+    };
+
+    // Level (OR inside group)
+    const levelList = toArray(level)
+      .map((v) => v.toUpperCase())
+      .filter((v): v is JobLevel =>
+        (['JUNIOR', 'MID', 'SENIOR', 'LEAD'] as string[]).includes(v),
+      );
+    if (levelList.length) {
+      qb.andWhere('job.jobLevel IN (:...levelList)', {
+        levelList: Array.from(new Set(levelList)),
+      });
     }
 
     // Location
@@ -198,25 +228,17 @@ export class JobsService {
       qb.andWhere('LOWER(job.location) LIKE :remote', { remote: '%remote%' });
     }
 
-    // Experience
-    const expStr = expLabel(exp);
-    if (expStr) {
-      qb.andWhere('LOWER(job.experience) LIKE :exp', {
-        exp: `%${expStr.toLowerCase()}%`,
+    // Experience (OR inside group)
+    const expList = toArray(exp).map(expLabel).filter(Boolean) as string[];
+    if (expList.length) {
+      const params: Record<string, string> = {};
+      const clauses = expList.map((value, i) => {
+        const key = `exp_${i}`;
+        params[key] = `%${value.toLowerCase()}%`;
+        return `LOWER(job.experience) LIKE :${key}`;
       });
+      qb.andWhere(`(${clauses.join(' OR ')})`, params);
     }
-
-    const toArray = (v: unknown): string[] => {
-      if (Array.isArray(v)) return v;
-      if (typeof v === 'string' && v.trim().length) {
-        // support CSV like ?education=bac,Intermediate
-        return v
-          .split(',')
-          .map((s) => s.trim())
-          .filter(Boolean);
-      }
-      return [];
-    };
 
     const eduSelected = toArray(education);
     const tagSelected = toArray(tags);
@@ -251,19 +273,26 @@ export class JobsService {
 
     qb.addSelect('COALESCE(job.maxSalary, job.minSalary)', 'job_effSalary');
 
-    // Salary range (overlap)
-    if (salary) {
-      const { min, max } = parseSalary(salary);
+    // Salary ranges (OR inside group)
+    const salaryList = toArray(salary).map(parseSalary);
+    const salaryClauses: string[] = [];
+    const salaryParams: Record<string, number> = {};
+    salaryList.forEach(({ min, max }, i) => {
       if (min != null && max != null) {
-        qb.andWhere(
-          '(COALESCE(job.minSalary, 0) <= :smax AND COALESCE(job.maxSalary, job.minSalary) >= :smin)',
-          { smin: min, smax: max },
+        salaryClauses.push(
+          `(COALESCE(job.minSalary, 0) <= :smax_${i} AND COALESCE(job.maxSalary, job.minSalary) >= :smin_${i})`,
         );
+        salaryParams[`smin_${i}`] = min;
+        salaryParams[`smax_${i}`] = max;
       } else if (min != null) {
-        qb.andWhere('COALESCE(job.maxSalary, job.minSalary) >= :smin', {
-          smin: min,
-        });
+        salaryClauses.push(
+          `COALESCE(job.maxSalary, job.minSalary) >= :smin_${i}`,
+        );
+        salaryParams[`smin_${i}`] = min;
       }
+    });
+    if (salaryClauses.length) {
+      qb.andWhere(`(${salaryClauses.join(' OR ')})`, salaryParams);
     }
 
     if (isNonEmptyArray(tags)) {

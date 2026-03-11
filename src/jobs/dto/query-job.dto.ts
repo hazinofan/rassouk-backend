@@ -27,6 +27,20 @@ const boolOrUndef = (value: unknown) =>
       ? undefined
       : false;
 
+const arrayOrUndef = (value: unknown) => {
+  if (value == null || value === '') return undefined;
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((v) => String(v).split(','))
+      .map((s) => s.trim())
+      .filter(Boolean);
+  }
+  return String(value)
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+};
+
 export class QueryJobDto {
   @IsOptional() @IsString() q?: string;
   @IsOptional() @IsString() role?: string;
@@ -46,15 +60,27 @@ export class QueryJobDto {
   jobType?: JobType;
 
   // EXP
-  @IsOptional() @IsString() exp?: string;
+  @IsOptional()
+  @Transform(({ value }) => arrayOrUndef(value))
+  @IsArray()
+  @IsString({ each: true })
+  exp?: string[];
 
   // Salary label
-  @IsOptional() @IsString() salary?: string;
+  @IsOptional()
+  @Transform(({ value }) => arrayOrUndef(value))
+  @IsArray()
+  @IsString({ each: true })
+  salary?: string[];
 
   // Level
   @IsOptional()
-  @IsIn(['JUNIOR', 'MID', 'SENIOR', 'LEAD'])
-  level?: JobLevel;
+  @Transform(({ value }) =>
+    arrayOrUndef(value)?.map((v) => v.toUpperCase()) ?? undefined,
+  )
+  @IsArray()
+  @IsIn(['JUNIOR', 'MID', 'SENIOR', 'LEAD'], { each: true })
+  level?: JobLevel[];
 
   @IsOptional()
   @Transform(({ value }) => {
