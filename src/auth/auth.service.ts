@@ -50,6 +50,18 @@ export class AuthService {
     await this.usersService.setRefreshTokenHash(user.id, hash);
   }
 
+  private ensureNotBanned(user: {
+    isBanned?: boolean;
+    bannedUntil?: Date | null;
+  }) {
+    if (
+      user.isBanned &&
+      (!user.bannedUntil || new Date(user.bannedUntil).getTime() > Date.now())
+    ) {
+      throw new UnauthorizedException('Compte suspendu');
+    }
+  }
+
   async signup(dto: SignupDto) {
     const email = dto.email.toLowerCase().trim();
     const existing = await this.usersService.findByEmail(email);
@@ -57,11 +69,10 @@ export class AuthService {
 
     const passwordHash = await bcrypt.hash(dto.password, 10);
     const name = dto.name
-    const role =
-      dto.role === 'employer' || dto.role === 'admin' ? dto.role : 'candidat';
+    const role = dto.role === 'employer' ? 'employer' : 'candidat';
 
-    // ⬇️ Onboarding now applies to BOTH employer and candidat (not admin)
-    const requiresOnboarding = role !== 'admin';
+    // Onboarding applies to non-admin users.
+    const requiresOnboarding = true;
 
     const user = await this.usersService.create({
       email,
@@ -114,6 +125,7 @@ export class AuthService {
 
     if (!user.emailVerified)
       throw new UnauthorizedException('Email non vérifié');
+    this.ensureNotBanned(user);
 
     const accessToken = await this.signAccess(user);
     const refreshToken = await this.signRefresh(user);
@@ -130,8 +142,7 @@ export class AuthService {
       },
       accessToken,
       refreshToken,
-      // ⬇️ Non-admin users need onboarding if not completed
-      needsOnboarding: user.role !== 'admin' && !user.isOnboarded,
+      needsOnboarding: !user.isOnboarded,
     };
   }
 
@@ -178,6 +189,8 @@ export class AuthService {
       await this.usersService.verifyEmail(user.id);
     }
 
+    this.ensureNotBanned(user);
+
     const accessToken = await this.signAccess(user);
     const refreshToken = await this.signRefresh(user);
     await this.saveRefreshToken(user, refreshToken);
@@ -206,6 +219,7 @@ export class AuthService {
     // 2) Load user
     const user = await this.usersService.findById(payload.sub);
     if (!user) throw new UnauthorizedException('User not found');
+    this.ensureNotBanned(user);
 
     // 3) (Optional but recommended) Check stored hash matches
     //    Uncomment when you implement saveRefreshToken() to persist a hash

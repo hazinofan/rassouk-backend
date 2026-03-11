@@ -218,6 +218,6 @@ export class UsersService {
 
   // NEW: remove user
   async remove(userId: number) {
-    await this.repo.delete(userId);
+    await this.repo.softDelete(userId);
   }
 }

@@ -10,6 +10,7 @@ export enum SalaryType { MONTHLY='MONTHLY', YEARLY='YEARLY', HOURLY='HOURLY' }
 export enum JobType { FULL_TIME='FULL_TIME', PART_TIME='PART_TIME', INTERNSHIP='INTERNSHIP', CONTRACT='CONTRACT', FREELANCE='FREELANCE' }
 export enum JobLevel { JUNIOR='JUNIOR', MID='MID', SENIOR='SENIOR', LEAD='LEAD' }
 export enum JobStatus { DRAFT='DRAFT', ACTIVE='ACTIVE', EXPIRED='EXPIRED' }
+export enum JobModerationStatus { PENDING='PENDING', APPROVED='APPROVED', REJECTED='REJECTED' }
 
 @Entity('jobs')
 @Index(['status', 'expiresAt'])
@@ -71,6 +72,22 @@ export class Job {
 
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.ACTIVE })
   status: JobStatus;
+
+  @Column({
+    type: 'enum',
+    enum: JobModerationStatus,
+    default: JobModerationStatus.APPROVED,
+  })
+  moderationStatus: JobModerationStatus;
+
+  @Column({ type: 'text', nullable: true, charset: 'utf8mb4', collation: 'utf8mb4_unicode_ci' })
+  moderationNote: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  moderatedAt: Date | null;
+
+  @Column({ type: 'int', nullable: true })
+  moderatedByUserId: number | null;
 
   @ManyToOne(() => User, (u) => u.jobs, { nullable: false })
   employer: User;

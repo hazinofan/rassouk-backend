@@ -13,7 +13,12 @@ import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
-import { Job, JobLevel, JobStatus, JobType } from './entities/job.entity';
+import {
+  Job,
+  JobLevel,
+  JobStatus,
+  JobType,
+} from './entities/job.entity';
 import { ApplicationStatus } from 'src/applications/entities/application.entity';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 
@@ -123,7 +128,7 @@ export class JobsService {
       expiresAt: this.toDateOrUndef(dto.expiresAt),
       slug: this.makeSlug(dto.title),
       employer: { id: employerId } as any,
-    } satisfies DeepPartial<Job>);
+    } as DeepPartial<Job>);
     return this.repo.save(job);
   }
 

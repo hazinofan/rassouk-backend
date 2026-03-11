@@ -14,7 +14,7 @@ export class SignupDto {
   name!: string;
 
   @IsString()
-  @IsIn(['candidat', 'employer', 'admin'])
-  role!: 'candidat' | 'employer' | 'admin';
+  @IsIn(['candidat', 'employer'])
+  role!: 'candidat' | 'employer';
 }
   

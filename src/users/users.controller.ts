@@ -30,6 +30,8 @@ export class UsersController {
 
   // POST /users
   @Post()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async create(@Body() body: any) {
     if (!body?.email) throw new BadRequestException('email is required');
     if (!body?.password) throw new BadRequestException('password is required');
@@ -45,6 +47,8 @@ export class UsersController {
 
   // GET /users
   @Get()
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async findAll() {
     const list = await this.users.findAll();
     return list.map((u) => this.strip(u));
@@ -53,13 +57,15 @@ export class UsersController {
   // GET /users/employers (alias: /users/emplyers)
   @Get(['employers', 'emplyers'])
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('candidat')
+  @Roles('candidat', 'admin')
   async findEmployers(@Query() query: QueryEmployersDto) {
     return this.users.findEmployers(query);
   }
 
   // GET /users/:id
   @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async findOne(@Param('id', ParseIntPipe) id: number) {
     const u = await this.users.findById(id);
     return this.strip(u);
@@ -67,6 +73,8 @@ export class UsersController {
 
   // PATCH /users/:id
   @Patch(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async update(@Param('id', ParseIntPipe) id: number, @Body() body: any) {
     const updated = await this.users.updatePartial(id, body);
     return this.strip(updated);
@@ -74,6 +82,8 @@ export class UsersController {
 
   // PATCH /users/:id/onboarding → set isOnboarded = true
   @Patch(':id/onboarding')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async completeOnboarding(@Param('id', ParseIntPipe) id: number) {
     const updated = await this.users.updatePartial(id, {
       isOnboarded: true,
@@ -83,6 +93,8 @@ export class UsersController {
 
   // PATCH /users/:id/onboarding-step → update onboardingStep
   @Patch(':id/onboarding-step')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async setStep(
     @Param('id', ParseIntPipe) id: number,
     @Body('step') step: number,
@@ -98,6 +110,8 @@ export class UsersController {
 
   // DELETE /users/:id
   @Delete(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('admin')
   async remove(@Param('id', ParseIntPipe) id: number) {
     await this.users.remove(id);
     return { success: true };

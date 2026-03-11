@@ -13,6 +13,7 @@ import {
   OneToMany,
   JoinColumn,
   OneToOne,
+  DeleteDateColumn,
 } from 'typeorm';
 // src/users/user.entity.ts
 export type UserRole = 'admin' | 'candidat' | 'employer';
@@ -45,6 +46,21 @@ export class User {
   })
   role: UserRole;
 
+  @Column({ type: 'boolean', default: false })
+  isBanned: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  bannedAt: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  bannedUntil: Date | null;
+
+  @Column({ type: 'varchar', length: 500, nullable: true })
+  bannedReason: string | null;
+
+  @Column({ type: 'int', nullable: true })
+  bannedByUserId: number | null;
+
   @OneToMany(() => Job, (job) => job.employer)
   jobs: Job[];
 
@@ -72,4 +88,7 @@ export class User {
 
   @UpdateDateColumn()
   updatedAt: Date;
+
+  @DeleteDateColumn()
+  deletedAt?: Date;
 }

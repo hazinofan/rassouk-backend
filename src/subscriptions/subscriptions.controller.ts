@@ -64,4 +64,5 @@ export class SubscriptionsController {
       .cancelPlanForUser(user.id, user.role)
       .then(() => this.entitlements.getBillingSnapshot(user.id));
   }
+
 }

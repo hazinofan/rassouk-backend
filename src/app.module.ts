@@ -16,6 +16,9 @@ import { AnalyticsModule } from './stats/stats.module';
 import { SubscriptionsModule } from './subscriptions/subscriptions.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ScheduleModule } from '@nestjs/schedule';
+import { SupportModule } from './support/support.module';
+import { AdminModule } from './admin/admin.module';
+import { BlogModule } from './blog/blog.module';
 
 @Module({
   imports: [
@@ -50,6 +53,9 @@ import { ScheduleModule } from '@nestjs/schedule';
     AnalyticsModule,
     SubscriptionsModule,
     NotificationsModule,
+    SupportModule,
+    AdminModule,
+    BlogModule,
   ],
 })
 export class AppModule {}
