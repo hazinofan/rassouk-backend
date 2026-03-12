@@ -46,11 +46,11 @@ export class BlogController {
     return this.blog.listAdmin(query);
   }
 
-  @Get('admin/blog/posts/:id')
+  @Get('admin/blog/posts/:slug')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles('admin')
-  getAdminPost(@Param('id', ParseIntPipe) id: number) {
-    return this.blog.getAdminPost(id);
+  getAdminPost(@Param('slug') slug: string) {
+    return this.blog.getAdminPostBySlug(slug);
   }
 
   @Post('admin/blog/posts')

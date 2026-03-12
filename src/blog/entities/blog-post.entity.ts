@@ -3,18 +3,16 @@ import {
   CreateDateColumn,
   Entity,
   Index,
-  JoinTable,
-  ManyToMany,
   ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { BlogCategory } from './blog-category.entity';
 import { BlogMedia } from './blog-media.entity';
-import { BlogTag } from './blog-tag.entity';
 
 export type BlogPostStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
 export type BlogPostVisibility = 'PUBLIC' | 'PRIVATE';
+export type BlogPostTag = 'employers' | 'candidats' | 'all';
 
 @Entity('blog_posts')
 @Index(['status', 'publishedAt'])
@@ -84,13 +82,11 @@ export class BlogPost {
   })
   category: BlogCategory | null;
 
-  @ManyToMany(() => BlogTag, { cascade: false })
-  @JoinTable({
-    name: 'blog_post_tags',
-    joinColumn: { name: 'post_id', referencedColumnName: 'id' },
-    inverseJoinColumn: { name: 'tag_id', referencedColumnName: 'id' },
+  @Column({
+    type: 'simple-array',
+    nullable: true,
   })
-  tags: BlogTag[];
+  tags: BlogPostTag[] | null;
 
   @ManyToOne(() => BlogMedia, { nullable: true, onDelete: 'SET NULL' })
   featuredMedia: BlogMedia | null;

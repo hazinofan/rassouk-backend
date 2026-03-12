@@ -6,11 +6,10 @@ import { BlogService } from './blog.service';
 import { BlogCategory } from './entities/blog-category.entity';
 import { BlogMedia } from './entities/blog-media.entity';
 import { BlogPost } from './entities/blog-post.entity';
-import { BlogTag } from './entities/blog-tag.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([BlogPost, BlogCategory, BlogTag, BlogMedia]),
+    TypeOrmModule.forFeature([BlogPost, BlogCategory, BlogMedia]),
     AuthModule,
   ],
   controllers: [BlogController],

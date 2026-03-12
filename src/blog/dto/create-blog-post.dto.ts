@@ -12,6 +12,7 @@ import {
   Min,
 } from 'class-validator';
 import { Type } from 'class-transformer';
+import { BlogPostTag } from '../entities/blog-post.entity';
 
 export class CreateBlogPostDto {
   @IsString()
@@ -55,9 +56,8 @@ export class CreateBlogPostDto {
 
   @IsOptional()
   @IsArray()
-  @Type(() => Number)
-  @IsInt({ each: true })
-  tagIds?: number[];
+  @IsIn(['employers', 'candidats', 'all'], { each: true })
+  tags?: BlogPostTag[];
 
   @IsOptional()
   @IsString()

@@ -4,25 +4,24 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { In, Repository } from 'typeorm';
+import { Repository } from 'typeorm';
 import { BlogQueryDto } from './dto/blog-query.dto';
 import { CreateBlogCategoryDto } from './dto/create-blog-category.dto';
 import { CreateBlogPostDto } from './dto/create-blog-post.dto';
 import { UpdateBlogCategoryDto } from './dto/update-blog-category.dto';
 import { UpdateBlogPostDto } from './dto/update-blog-post.dto';
 import { BlogCategory } from './entities/blog-category.entity';
-import { BlogPost } from './entities/blog-post.entity';
-import { BlogTag } from './entities/blog-tag.entity';
+import { BlogPost, BlogPostTag } from './entities/blog-post.entity';
 
 @Injectable()
 export class BlogService {
+  private readonly allowedTags: BlogPostTag[] = ['employers', 'candidats', 'all'];
+
   constructor(
     @InjectRepository(BlogPost)
     private readonly postsRepo: Repository<BlogPost>,
     @InjectRepository(BlogCategory)
     private readonly categoriesRepo: Repository<BlogCategory>,
-    @InjectRepository(BlogTag)
-    private readonly tagsRepo: Repository<BlogTag>,
   ) {}
 
   async createDraft(dto: CreateBlogPostDto) {
@@ -31,7 +30,7 @@ export class BlogService {
 
     const slug = await this.generateUniqueSlug(title);
     const category = await this.resolveCategory(dto.categoryId);
-    const tags = await this.resolveTags(dto.tagIds);
+    const tags = this.resolveTags(dto.tags);
 
     const post = this.postsRepo.create({
       title,
@@ -65,7 +64,6 @@ export class BlogService {
     const qb = this.postsRepo
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.category', 'category')
-      .leftJoinAndSelect('post.tags', 'tag')
       .orderBy('post.updatedAt', 'DESC')
       .skip(skip)
       .take(limit);
@@ -83,10 +81,10 @@ export class BlogService {
     return { items, total, page, limit };
   }
 
-  async getAdminPost(id: number) {
+  async getAdminPostBySlug(slug: string) {
     const post = await this.postsRepo.findOne({
-      where: { id },
-      relations: ['category', 'tags'],
+      where: { slug },
+      relations: ['category'],
     });
     if (!post) throw new NotFoundException('Post not found');
     return post;
@@ -95,7 +93,7 @@ export class BlogService {
   async updatePost(id: number, dto: UpdateBlogPostDto) {
     const post = await this.postsRepo.findOne({
       where: { id },
-      relations: ['category', 'tags'],
+      relations: ['category'],
     });
     if (!post) throw new NotFoundException('Post not found');
 
@@ -123,8 +121,8 @@ export class BlogService {
     if (dto.categoryId !== undefined) {
       post.category = (await this.resolveCategory(dto.categoryId)) ?? null;
     }
-    if (dto.tagIds !== undefined) {
-      post.tags = (await this.resolveTags(dto.tagIds)) ?? [];
+    if (dto.tags !== undefined) {
+      post.tags = this.resolveTags(dto.tags);
     }
 
     return this.postsRepo.save(post);
@@ -163,7 +161,6 @@ export class BlogService {
     const qb = this.postsRepo
       .createQueryBuilder('post')
       .leftJoinAndSelect('post.category', 'category')
-      .leftJoinAndSelect('post.tags', 'tag')
       .where('post.status = :status', { status: 'PUBLISHED' })
       .andWhere('post.visibility = :visibility', { visibility: 'PUBLIC' })
       .orderBy('post.publishedAt', 'DESC')
@@ -183,7 +180,7 @@ export class BlogService {
   async getPublishedBySlug(slug: string) {
     const post = await this.postsRepo.findOne({
       where: { slug, status: 'PUBLISHED', visibility: 'PUBLIC' },
-      relations: ['category', 'tags'],
+      relations: ['category'],
     });
     if (!post) throw new NotFoundException('Post not found');
     return post;
@@ -228,14 +225,17 @@ export class BlogService {
     return category;
   }
 
-  private async resolveTags(tagIds?: number[]) {
-    if (!tagIds) return undefined;
-    if (!tagIds.length) return [];
-    const tags = await this.tagsRepo.findBy({ id: In(tagIds) });
-    if (tags.length !== new Set(tagIds).size) {
-      throw new BadRequestException('One or more tags not found');
+  private resolveTags(tags?: BlogPostTag[]): BlogPostTag[] {
+    if (tags === undefined) return ['all'];
+    if (!tags.length) return [];
+    const unique: BlogPostTag[] = Array.from(new Set(tags));
+    const hasInvalid = unique.some((tag) => !this.allowedTags.includes(tag));
+    if (hasInvalid) {
+      throw new BadRequestException(
+        'Invalid tags. Allowed values: employers, candidats, all',
+      );
     }
-    return tags;
+    return unique;
   }
 
   private slugify(input: string) {
