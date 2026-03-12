@@ -5,6 +5,8 @@ export type UploadType =
   | 'avatars'
   | 'resumes'
   | 'banners'
+  | 'covers'
+  | 'blog-editor'
   | 'logos'
   | 'attachments'
   | 'certificates'
@@ -34,6 +36,18 @@ export const UPLOAD_PROFILES: Record<UploadType, Profile> = {
     root: () => join(process.cwd(), 'public', 'banners'),
     publicUrl: (_req, f) => `/public/banners/${f}`,
     maxSize: 5 * 1024 * 1024,
+    mimeOk: isImage,
+  },
+  covers: {
+    root: () => join(process.cwd(), 'public', 'covers'),
+    publicUrl: (_req, f) => `/public/covers/${f}`,
+    maxSize: 5 * 1024 * 1024,
+    mimeOk: isImage,
+  },
+  'blog-editor': {
+    root: () => join(process.cwd(), 'public', 'blog-editor'),
+    publicUrl: (_req, f) => `/public/blog-editor/${f}`,
+    maxSize: 12 * 1024 * 1024,
     mimeOk: isImage,
   },
   logos: {

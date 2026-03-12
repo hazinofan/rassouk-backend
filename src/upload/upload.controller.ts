@@ -52,13 +52,10 @@ export class UploadController {
         filename: makeFilename,
       }),
       fileFilter: fileFilter(),
+      // Multer expects numeric limits; dynamic per-type checks are enforced below.
       limits: {
-        fileSize: (req: any, _file: any) => {
-          const type: UploadType = req.params.type;
-          const profile = UPLOAD_PROFILES[type];
-          return profile?.maxSize ?? 5 * 1024 * 1024;
-        },
-      } as any,
+        fileSize: 15 * 1024 * 1024,
+      },
     }),
   )
   async uploadOne(
@@ -71,6 +68,15 @@ export class UploadController {
     if (!file) throw new BadRequestException('Aucun fichier reçu');
 
     const profile = UPLOAD_PROFILES[type];
+    if (file.size > profile.maxSize) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {}
+      throw new BadRequestException(
+        `Fichier trop volumineux (max ${Math.floor(profile.maxSize / (1024 * 1024))} MB)`,
+      );
+    }
+
     const url = profile.publicUrl(null, file.filename);
 
     return {
