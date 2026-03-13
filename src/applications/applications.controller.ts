@@ -18,6 +18,9 @@ import { ApplicationsService } from './applications.service';
 import { UpdateApplicationDto } from './dto/update-application.dto';
 import { ApplicationStatus } from './entities/application.entity';
 import { QueryApplicationsDto } from './dto/query-applications.dto';
+import { BulkUpdateApplicationStatusDto } from './dto/bulk-update-application-status.dto';
+import { SendInterviewInvitationDto } from './dto/send-interview-invitation.dto';
+import { SendRejectionMessageDto } from './dto/send-rejection-message.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller()
@@ -75,6 +78,56 @@ export class ApplicationsController {
       +id,
       employerId,
       dto.status as ApplicationStatus,
+      {
+        employerNote: dto.employerNote,
+        rejectionReason: dto.rejectionReason,
+        interviewAt: dto.interviewAt,
+      },
+    );
+  }
+
+  @Roles('employer')
+  @Patch('/applications/bulk-status')
+  async bulkPatchStatus(@Body() dto: BulkUpdateApplicationStatusDto, @Req() req: any) {
+    return this.service.bulkUpdateStatusForEmployer(
+      req.user.id,
+      dto.applicationIds,
+      dto.status,
+      {
+        employerNote: dto.employerNote,
+        rejectionReason: dto.rejectionReason,
+        interviewAt: dto.interviewAt,
+      },
+    );
+  }
+
+  @Roles('employer')
+  @Post('/applications/:id/interview-invitation')
+  async sendInterviewInvitation(
+    @Param('id') id: string,
+    @Body() dto: SendInterviewInvitationDto,
+    @Req() req: any,
+  ) {
+    return this.service.sendInterviewInvitation(
+      Number(id),
+      Number(req.user.id),
+      dto.interviewAt,
+      dto.message,
+    );
+  }
+
+  @Roles('employer')
+  @Post('/applications/:id/rejection-message')
+  async sendRejectionMessage(
+    @Param('id') id: string,
+    @Body() dto: SendRejectionMessageDto,
+    @Req() req: any,
+  ) {
+    return this.service.sendRejectionMessage(
+      Number(id),
+      Number(req.user.id),
+      dto.rejectionReason,
+      dto.message,
     );
   }
 

@@ -17,10 +17,18 @@ import { QueryCandidatesDto } from './dto/query-candidates.dto';
 export class CandidateProfilesController {
   constructor(private service: CandidateProfilesService) { }
 
+  @Roles('candidat', 'employer', 'admin')
   @Get()
   list(@Query() q: QueryCandidatesDto) {
     return this.service.listPublic(q)
   }
+
+  @Roles('candidat', 'employer', 'admin')
+  @Get('public/:userId')
+  publicProfile(@Param('userId', ParseIntPipe) userId: number, @Req() req: any) {
+    return this.service.getPublicByUserIdForViewer(userId, req.user);
+  }
+
   // Profile
   @Roles('candidat')
   @Get('me')

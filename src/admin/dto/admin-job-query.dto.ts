@@ -14,8 +14,8 @@ export class AdminJobQueryDto extends AdminPaginationDto {
   employerId?: number;
 
   @IsOptional()
-  @IsIn(['DRAFT', 'ACTIVE', 'EXPIRED'])
-  status?: 'DRAFT' | 'ACTIVE' | 'EXPIRED';
+  @IsIn(['DRAFT', 'ACTIVE', 'PAUSED', 'EXPIRED'])
+  status?: 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'EXPIRED';
 
   @IsOptional()
   @IsIn(['createdAt', 'updatedAt', 'title'])

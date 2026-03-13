@@ -18,12 +18,23 @@ export type EmployerFeatureKey =
   | 'export_enabled'
   | 'integrations_enabled'
   | 'urgent_jobs_enabled'
-  | 'auto_candidate_followup';
+  | 'auto_candidate_followup'
+  | 'featured_jobs_enabled'
+  | 'candidate_contact_enabled'
+  | 'candidate_notes_enabled'
+  | 'interview_scheduling_enabled'
+  | 'priority_support_enabled'
+  | 'verified_company_badge'
+  | 'job_refresh_enabled'
+  | 'bulk_application_actions_enabled';
 
 export type EmployerLimitKey =
   | 'max_active_jobs'
   | 'max_saved_candidates'
-  | 'cv_access_days';
+  | 'cv_access_days'
+  | 'max_featured_jobs'
+  | 'max_job_refreshes_per_month'
+  | 'max_contacted_candidates_per_month';
 
 export type CandidateFeatureKey =
   | 'alerts_basic'
@@ -64,6 +75,9 @@ export interface UsageCounter {
 export interface EmployerUsage {
   max_active_jobs: UsageCounter;
   max_saved_candidates: UsageCounter;
+  max_featured_jobs: UsageCounter;
+  max_job_refreshes_per_month: UsageCounter;
+  max_contacted_candidates_per_month: UsageCounter;
 }
 
 export interface CandidateEntitlements {

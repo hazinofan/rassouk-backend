@@ -22,6 +22,7 @@ import { Roles } from 'src/auth/decorators/roles.decorator';
 import { CurrentUser } from 'src/auth/decorators/current-user.decoratoe';
 import { UpdateJobStatusDto } from './dto/update-job-status.dto';
 import { JobStatus } from './entities/job.entity';
+import { RefreshJobDto } from './dto/refresh-job.dto';
 @Controller('jobs')
 export class JobsController {
   constructor(private readonly jobs: JobsService) {}
@@ -47,6 +48,40 @@ export class JobsController {
   ) {
     const employerId = req.user.id;
     return this.jobs.updateStatus(id, employerId, dto.status as JobStatus);
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer')
+  @Post(':id/duplicate')
+  duplicate(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+    return this.jobs.duplicate(id, Number(user.id));
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer')
+  @Post(':id/refresh')
+  refresh(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: RefreshJobDto,
+    @CurrentUser() user: any,
+  ) {
+    return this.jobs.refreshOrRepublish(id, Number(user.id), {
+      expiresAt: dto.expiresAt,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer')
+  @Patch(':id/pause')
+  pause(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+    return this.jobs.pause(id, Number(user.id));
+  }
+
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer')
+  @Patch(':id/resume')
+  resume(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: any) {
+    return this.jobs.resume(id, Number(user.id));
   }
 
   // Employer endpoints

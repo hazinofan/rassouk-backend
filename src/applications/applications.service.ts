@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import { Application, ApplicationStatus } from './entities/application.entity';
 import { Job, JobStatus } from 'src/jobs/entities/job.entity';
 import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
@@ -156,6 +156,11 @@ export class ApplicationsService {
     appId: number,
     employerId: number,
     next: ApplicationStatus,
+    details?: {
+      employerNote?: string;
+      rejectionReason?: string;
+      interviewAt?: string;
+    },
   ) {
     const app = await this.appRepo.findOne({
       where: { id: appId },
@@ -164,7 +169,14 @@ export class ApplicationsService {
     if (!app) throw new NotFoundException('Application not found');
     if (app.employerId !== employerId)
       throw new ForbiddenException('You do not own this application');
-    if (app.status === next) return { id: app.id, status: app.status };
+    if (
+      app.status === next &&
+      !details?.employerNote &&
+      !details?.rejectionReason &&
+      !details?.interviewAt
+    ) {
+      return { id: app.id, status: app.status };
+    }
 
     const order: Record<ApplicationStatus, number> = {
       SUBMITTED: 1,
@@ -187,7 +199,7 @@ export class ApplicationsService {
       return { id: app.id, status: app.status }; // ignore other downgrades
     }
 
-    app.status = next;
+    await this.applyEmployerStatusTransition(app, next, details);
     await this.appRepo.save(app);
 
     if (app.candidate?.id) {
@@ -206,6 +218,94 @@ export class ApplicationsService {
     }
 
     return { id: app.id, status: app.status };
+  }
+
+  async bulkUpdateStatusForEmployer(
+    employerId: number,
+    appIds: number[],
+    next: ApplicationStatus,
+    details?: {
+      employerNote?: string;
+      rejectionReason?: string;
+      interviewAt?: string;
+    },
+  ) {
+    await this.entitlements.assertEmployerFeature(
+      employerId,
+      'bulk_application_actions_enabled',
+    );
+    const allowedStatuses = new Set<ApplicationStatus>([
+      ApplicationStatus.VIEWED,
+      ApplicationStatus.SHORTLISTED,
+      ApplicationStatus.REJECTED,
+    ]);
+    if (!allowedStatuses.has(next)) {
+      throw new BadRequestException(
+        'Bulk update only supports VIEWED, SHORTLISTED, and REJECTED statuses',
+      );
+    }
+
+    const ids = Array.from(new Set(appIds.map((id) => Number(id)).filter(Boolean)));
+    if (!ids.length) {
+      return { updatedCount: 0, updatedIds: [], skippedIds: [] };
+    }
+
+    const apps = await this.appRepo.find({
+      where: {
+        id: In(ids),
+        employerId,
+      },
+      relations: ['candidate', 'job'],
+    });
+
+    const byId = new Map(apps.map((app) => [app.id, app]));
+    const updatedIds: number[] = [];
+    const skippedIds: number[] = [];
+
+    for (const id of ids) {
+      const app = byId.get(id);
+      if (!app) {
+        skippedIds.push(id);
+        continue;
+      }
+
+      if (app.status === next) {
+        skippedIds.push(id);
+        continue;
+      }
+
+      await this.applyEmployerStatusTransition(app, next, details);
+      updatedIds.push(id);
+    }
+
+    if (apps.length) {
+      await this.appRepo.save(apps);
+    }
+
+    await Promise.all(
+      apps
+        .filter((app) => updatedIds.includes(app.id) && app.candidate?.id)
+        .map((app) =>
+          this.notifications.create({
+            userId: app.candidate.id,
+            type: NotificationType.APPLICATION_STATUS_CHANGED,
+            title: 'Application update',
+            message: `Your application for "${app.job?.title ?? 'a job'}" is now ${next.toLowerCase()}.`,
+            payload: {
+              applicationId: app.id,
+              jobId: app.job?.id,
+              jobSlug: (app.job as any)?.slug,
+              status: next,
+            },
+          }),
+        ),
+    );
+
+    return {
+      updatedCount: updatedIds.length,
+      updatedIds,
+      skippedIds,
+    };
   }
 
   async getApplicationsForJob(jobId: number, employerId: number) {
@@ -284,6 +384,22 @@ export class ApplicationsService {
       );
     }
 
+    if (qs.status?.length) {
+      qb.andWhere('app.status IN (:...status)', { status: qs.status });
+    }
+
+    if (qs.appliedFrom) {
+      qb.andWhere('app.createdAt >= :appliedFrom', {
+        appliedFrom: new Date(qs.appliedFrom),
+      });
+    }
+
+    if (qs.appliedTo) {
+      qb.andWhere('app.createdAt <= :appliedTo', {
+        appliedTo: new Date(qs.appliedTo),
+      });
+    }
+
     const [data, total] = await qb.getManyAndCount();
     const masked = await Promise.all(
       data.map((app) => this.maskApplicationCvIfNeeded(app)),
@@ -343,5 +459,165 @@ export class ApplicationsService {
       startedAt.getTime() + cvAccessDays * 24 * 60 * 60 * 1000,
     );
     return cutoff >= new Date();
+  }
+
+  async sendInterviewInvitation(
+    appId: number,
+    employerId: number,
+    interviewAt: string,
+    message?: string,
+  ) {
+    await this.entitlements.assertEmployerFeature(
+      employerId,
+      'candidate_contact_enabled',
+    );
+    await this.entitlements.assertEmployerFeature(
+      employerId,
+      'interview_scheduling_enabled',
+    );
+
+    const app = await this.appRepo.findOne({
+      where: { id: appId, employerId },
+      relations: ['candidate', 'job'],
+    });
+    if (!app) throw new NotFoundException('Application not found');
+
+    const date = new Date(interviewAt);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid interview date');
+    }
+
+    await this.entitlements.assertEmployerMonthlyActionLimit(
+      employerId,
+      'max_contacted_candidates_per_month',
+    );
+
+    app.interviewAt = date;
+    await this.applyEmployerStatusTransition(app, ApplicationStatus.INTERVIEW, {
+      interviewAt,
+    });
+    await this.appRepo.save(app);
+
+    if (app.candidate?.email) {
+      await this.mail.sendInterviewInvitation({
+        to: app.candidate.email,
+        jobTitle: app.job?.title ?? 'Job opportunity',
+        interviewAt: date,
+        message,
+      });
+    }
+
+    await this.entitlements.trackEmployerMeteredEvent(
+      employerId,
+      'employer_candidate_contacted',
+      { applicationId: app.id, type: 'interview_invitation' },
+    );
+
+    return { ok: true, applicationId: app.id, interviewAt: app.interviewAt };
+  }
+
+  async sendRejectionMessage(
+    appId: number,
+    employerId: number,
+    rejectionReason: string,
+    message?: string,
+  ) {
+    await this.entitlements.assertEmployerFeature(
+      employerId,
+      'candidate_contact_enabled',
+    );
+    await this.entitlements.assertEmployerMonthlyActionLimit(
+      employerId,
+      'max_contacted_candidates_per_month',
+    );
+
+    const app = await this.appRepo.findOne({
+      where: { id: appId, employerId },
+      relations: ['candidate', 'job'],
+    });
+    if (!app) throw new NotFoundException('Application not found');
+
+    await this.applyEmployerStatusTransition(app, ApplicationStatus.REJECTED, {
+      rejectionReason,
+    });
+    await this.appRepo.save(app);
+
+    if (app.candidate?.email) {
+      await this.mail.sendApplicationRejection({
+        to: app.candidate.email,
+        jobTitle: app.job?.title ?? 'Job opportunity',
+        reason: rejectionReason,
+        message,
+      });
+    }
+
+    await this.entitlements.trackEmployerMeteredEvent(
+      employerId,
+      'employer_candidate_contacted',
+      { applicationId: app.id, type: 'rejection_message' },
+    );
+
+    return { ok: true, applicationId: app.id, status: app.status };
+  }
+
+  private async applyEmployerStatusTransition(
+    app: Application,
+    next: ApplicationStatus,
+    details?: {
+      employerNote?: string;
+      rejectionReason?: string;
+      interviewAt?: string;
+    },
+  ) {
+    const now = new Date();
+
+    if (details?.employerNote?.trim()) {
+      await this.entitlements.assertEmployerFeature(
+        Number(app.employerId),
+        'candidate_notes_enabled',
+      );
+      app.employerNote = details.employerNote.trim();
+    }
+
+    if (details?.interviewAt) {
+      await this.entitlements.assertEmployerFeature(
+        Number(app.employerId),
+        'interview_scheduling_enabled',
+      );
+      const interviewAt = new Date(details.interviewAt);
+      if (Number.isNaN(interviewAt.getTime())) {
+        throw new BadRequestException('Invalid interview date');
+      }
+      app.interviewAt = interviewAt;
+    }
+
+    if (details?.rejectionReason?.trim()) {
+      app.rejectionReason = details.rejectionReason.trim();
+    }
+
+    app.status = next;
+
+    if (next === ApplicationStatus.VIEWED && !app.viewedAt) {
+      app.viewedAt = now;
+    }
+    if (next === ApplicationStatus.SHORTLISTED && !app.shortlistedAt) {
+      app.shortlistedAt = now;
+      if (!app.viewedAt) app.viewedAt = now;
+    }
+    if (next === ApplicationStatus.INTERVIEW && !app.interviewedAt) {
+      app.interviewedAt = now;
+      if (!app.shortlistedAt) app.shortlistedAt = now;
+      if (!app.viewedAt) app.viewedAt = now;
+    }
+    if (next === ApplicationStatus.OFFERED && !app.offeredAt) {
+      app.offeredAt = now;
+      if (!app.interviewedAt) app.interviewedAt = now;
+      if (!app.shortlistedAt) app.shortlistedAt = now;
+      if (!app.viewedAt) app.viewedAt = now;
+    }
+    if (next === ApplicationStatus.REJECTED && !app.rejectedAt) {
+      app.rejectedAt = now;
+      if (!app.viewedAt) app.viewedAt = now;
+    }
   }
 }

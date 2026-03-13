@@ -78,6 +78,50 @@ export class MailService {
     });
   }
 
+  async sendInterviewInvitation(opts: {
+    to: string;
+    jobTitle: string;
+    interviewAt: Date;
+    message?: string;
+  }) {
+    const when = opts.interviewAt.toLocaleString('fr-FR', {
+      dateStyle: 'full',
+      timeStyle: 'short',
+    });
+    await this.transporter.sendMail({
+      from: this.config.get('MAIL_FROM'),
+      to: opts.to,
+      subject: `Invitation entretien - ${opts.jobTitle}`,
+      html: `
+        <h2>Invitation a un entretien</h2>
+        <p>Votre candidature pour <strong>${this.escapeHtml(opts.jobTitle)}</strong> a ete retenue.</p>
+        <p><strong>Date proposee:</strong> ${this.escapeHtml(when)}</p>
+        ${opts.message ? `<p>${this.escapeHtml(opts.message).replace(/\r?\n/g, '<br/>')}</p>` : ''}
+        <p>Merci de repondre a cet email pour confirmer votre disponibilite.</p>
+      `,
+    });
+  }
+
+  async sendApplicationRejection(opts: {
+    to: string;
+    jobTitle: string;
+    reason: string;
+    message?: string;
+  }) {
+    await this.transporter.sendMail({
+      from: this.config.get('MAIL_FROM'),
+      to: opts.to,
+      subject: `Mise a jour candidature - ${opts.jobTitle}`,
+      html: `
+        <h2>Mise a jour de votre candidature</h2>
+        <p>Merci pour votre candidature au poste <strong>${this.escapeHtml(opts.jobTitle)}</strong>.</p>
+        <p><strong>Motif:</strong> ${this.escapeHtml(opts.reason)}</p>
+        ${opts.message ? `<p>${this.escapeHtml(opts.message).replace(/\r?\n/g, '<br/>')}</p>` : ''}
+        <p>Nous vous encourageons a continuer a postuler sur la plateforme.</p>
+      `,
+    });
+  }
+
   async sendJobDigest(opts: {
     to: string;
     candidateName: string;

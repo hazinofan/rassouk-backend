@@ -12,6 +12,7 @@ import { User, UserRole } from 'src/users/users.entity';
 import { Between, Repository } from 'typeorm';
 import { Job } from 'src/jobs/entities/job.entity';
 import { JobStatus } from 'src/jobs/entities/job.entity';
+import { JobRefreshEvent } from 'src/jobs/entities/job-refresh-event.entity';
 import { SavedCandidate } from 'src/saved_candidate/entities/saved_candidate.entity';
 import { Application } from 'src/applications/entities/application.entity';
 import { JobBookmark } from 'src/job-bookmark/entities/job-bookmark.entity';
@@ -71,6 +72,8 @@ export class EntitlementsService {
     private readonly bookmarksRepo: Repository<JobBookmark>,
     @InjectRepository(CandidateResume)
     private readonly resumesRepo: Repository<CandidateResume>,
+    @InjectRepository(JobRefreshEvent)
+    private readonly jobRefreshEventsRepo: Repository<JobRefreshEvent>,
     @Inject(CACHE_MANAGER) private readonly cache: Cache,
   ) {}
 
@@ -269,6 +272,50 @@ export class EntitlementsService {
     return entitlements;
   }
 
+  async assertEmployerMonthlyActionLimit(
+    tenantId: number,
+    limitKey:
+      | 'max_job_refreshes_per_month'
+      | 'max_contacted_candidates_per_month',
+  ): Promise<EmployerEntitlements> {
+    const entitlements = await this.getEmployerEntitlements(tenantId);
+    this.ensureActive(entitlements);
+
+    const monthWhere = this.getMonthBetweenClause();
+    let current = 0;
+
+    if (limitKey === 'max_job_refreshes_per_month') {
+      current = await this.jobRefreshEventsRepo.count({
+        where: { employerId: tenantId, createdAt: monthWhere },
+      });
+    } else if (limitKey === 'max_contacted_candidates_per_month') {
+      current = await this.subscriptionEventsRepo.count({
+        where: {
+          tenant: { id: tenantId },
+          eventName: 'employer_candidate_contacted',
+          createdAt: monthWhere,
+        },
+      });
+    }
+
+    await this.ensureWithinLimit(tenantId, entitlements, limitKey, current);
+
+    return entitlements;
+  }
+
+  async trackEmployerMeteredEvent(
+    tenantId: number,
+    eventName: 'employer_candidate_contacted',
+    payload: Record<string, unknown> = {},
+  ) {
+    const entitlements = await this.getEmployerEntitlements(tenantId);
+    await this.trackEvent(tenantId, eventName, {
+      audience: entitlements.audience,
+      planKey: entitlements.planKey,
+      ...payload,
+    });
+  }
+
   async assertCandidateLimit(
     tenantId: number,
     limitKey: CandidateLimitKey,
@@ -292,12 +339,32 @@ export class EntitlementsService {
     tenantId: number,
   ): Promise<EmployerBillingSnapshot> {
     const entitlements = await this.getEmployerEntitlements(tenantId);
-    const [activeJobs, savedCandidates] = await Promise.all([
+    const monthWhere = this.getMonthBetweenClause();
+    const [
+      activeJobs,
+      savedCandidates,
+      featuredJobs,
+      jobRefreshesThisMonth,
+      contactedCandidatesThisMonth,
+    ] = await Promise.all([
       this.jobsRepo.count({
         where: { employer: { id: tenantId }, status: JobStatus.ACTIVE },
       }),
       this.savedCandidatesRepo.count({
         where: { employer: { id: tenantId } },
+      }),
+      this.jobsRepo.count({
+        where: { employer: { id: tenantId }, isFeatured: true },
+      }),
+      this.jobRefreshEventsRepo.count({
+        where: { employerId: tenantId, createdAt: monthWhere },
+      }),
+      this.subscriptionEventsRepo.count({
+        where: {
+          tenant: { id: tenantId },
+          eventName: 'employer_candidate_contacted',
+          createdAt: monthWhere,
+        },
       }),
     ]);
 
@@ -311,6 +378,18 @@ export class EntitlementsService {
         max_saved_candidates: this.makeUsageCounter(
           savedCandidates,
           entitlements.limits.max_saved_candidates,
+        ),
+        max_featured_jobs: this.makeUsageCounter(
+          featuredJobs,
+          entitlements.limits.max_featured_jobs,
+        ),
+        max_job_refreshes_per_month: this.makeUsageCounter(
+          jobRefreshesThisMonth,
+          entitlements.limits.max_job_refreshes_per_month,
+        ),
+        max_contacted_candidates_per_month: this.makeUsageCounter(
+          contactedCandidatesThisMonth,
+          entitlements.limits.max_contacted_candidates_per_month,
         ),
       },
     };

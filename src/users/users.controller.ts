@@ -4,12 +4,14 @@ import {
   BadRequestException,
   Controller,
   Delete,
+  ForbiddenException,
   Get,
   Param,
   ParseIntPipe,
   Patch,
   Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
@@ -65,9 +67,21 @@ export class UsersController {
   // GET /users/:id
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  async findOne(@Param('id', ParseIntPipe) id: number) {
+  @Roles('admin', 'employer', 'candidat')
+  async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     const u = await this.users.findById(id);
+
+    const requesterRole = String(req.user?.role || '').toLowerCase();
+    const requesterId = Number(req.user?.id);
+
+    if (requesterRole === 'candidat' && requesterId !== id) {
+      throw new ForbiddenException('Candidates can only access their own user');
+    }
+
+    if (requesterRole === 'employer' && u?.role !== 'candidat') {
+      throw new ForbiddenException('Employers can only access candidate users');
+    }
+
     return this.strip(u);
   }
 

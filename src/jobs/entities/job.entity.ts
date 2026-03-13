@@ -9,7 +9,7 @@ import {
 export enum SalaryType { MONTHLY='MONTHLY', YEARLY='YEARLY', HOURLY='HOURLY' }
 export enum JobType { FULL_TIME='FULL_TIME', PART_TIME='PART_TIME', INTERNSHIP='INTERNSHIP', CONTRACT='CONTRACT', FREELANCE='FREELANCE' }
 export enum JobLevel { JUNIOR='JUNIOR', MID='MID', SENIOR='SENIOR', LEAD='LEAD' }
-export enum JobStatus { DRAFT='DRAFT', ACTIVE='ACTIVE', EXPIRED='EXPIRED' }
+export enum JobStatus { DRAFT='DRAFT', ACTIVE='ACTIVE', PAUSED='PAUSED', EXPIRED='EXPIRED' }
 export enum JobModerationStatus { PENDING='PENDING', APPROVED='APPROVED', REJECTED='REJECTED' }
 
 @Entity('jobs')
@@ -69,6 +69,21 @@ export class Job {
 
   @Column({ type: 'timestamp', nullable: true })
   expiresAt?: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  visibleAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  lastRefreshedAt?: Date | null;
+
+  @Column({ type: 'tinyint', default: 0 })
+  isUrgent: boolean;
+
+  @Column({ type: 'tinyint', default: 0 })
+  isFeatured: boolean;
+
+  @Column({ type: 'timestamp', nullable: true })
+  boostedUntil?: Date | null;
 
   @Column({ type: 'enum', enum: JobStatus, default: JobStatus.ACTIVE })
   status: JobStatus;

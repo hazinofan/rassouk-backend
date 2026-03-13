@@ -1,9 +1,21 @@
-import { PartialType } from '@nestjs/mapped-types';
-import { CreateApplicationDto } from './create-application.dto';
 import { ApplicationStatus } from '../entities/application.entity';
-import { IsEnum } from 'class-validator';
+import { IsDateString, IsEnum, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateApplicationDto {
-     @IsEnum(ApplicationStatus)
+  @IsEnum(ApplicationStatus)
   status!: ApplicationStatus;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(4000)
+  employerNote?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(255)
+  rejectionReason?: string;
+
+  @IsOptional()
+  @IsDateString()
+  interviewAt?: string;
 }

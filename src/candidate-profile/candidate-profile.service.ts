@@ -265,4 +265,71 @@ export class CandidateProfilesService {
       pageCount: Math.ceil(total / Number(pageSize)),
     };
   }
+
+  async getPublicByUserIdForViewer(
+    candidateUserId: number,
+    viewer: { id: number; role: string },
+  ) {
+    const profile = await this.profiles.findOne({
+      where: { userId: candidateUserId },
+      relations: ['experiences', 'educations', 'resumes', 'user'],
+      order: {
+        experiences: { year: 'DESC' },
+        educations: { year: 'DESC' },
+        resumes: { uploadedAt: 'DESC' },
+      },
+    });
+
+    if (!profile) throw new NotFoundException('Candidate profile not found');
+
+    const role = String(viewer.role || '').toLowerCase();
+    const isCandidateOwner =
+      role === 'candidat' && Number(viewer.id) === Number(candidateUserId);
+
+    if (isCandidateOwner || role === 'admin') {
+      return profile;
+    }
+
+    if (role !== 'employer') {
+      throw new ForbiddenException('Forbidden');
+    }
+
+    const entitlements = await this.entitlements.getEmployerEntitlements(
+      Number(viewer.id),
+    );
+    const canAccessCv =
+      entitlements.status === 'active' &&
+      this.isCvWindowOpen(
+        entitlements.startedAt,
+        entitlements.limits.cv_access_days,
+      );
+
+    if (canAccessCv) {
+      return profile;
+    }
+
+    return {
+      ...profile,
+      resumes: (profile.resumes ?? []).map((resume: any) => ({
+        ...resume,
+        filePath: null,
+        url: null,
+        locked: true,
+      })),
+    };
+  }
+
+  private isCvWindowOpen(
+    startedAt: Date | null,
+    cvAccessDays: number | null,
+  ): boolean {
+    if (!startedAt || cvAccessDays === null || cvAccessDays <= 0) {
+      return false;
+    }
+
+    const cutoff = new Date(
+      startedAt.getTime() + cvAccessDays * 24 * 60 * 60 * 1000,
+    );
+    return cutoff >= new Date();
+  }
 }

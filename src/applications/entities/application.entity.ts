@@ -41,6 +41,30 @@ export class Application {
   @Column({ type: 'enum', enum: ApplicationStatus, default: ApplicationStatus.SUBMITTED })
   status: ApplicationStatus;
 
+  @Column({ type: 'text', nullable: true })
+  employerNote?: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  rejectionReason?: string | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  interviewAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  viewedAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  shortlistedAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  interviewedAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  offeredAt?: Date | null;
+
+  @Column({ type: 'timestamp', nullable: true })
+  rejectedAt?: Date | null;
+
   @CreateDateColumn() createdAt: Date;
   @UpdateDateColumn() updatedAt: Date;
 }

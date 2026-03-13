@@ -1,6 +1,6 @@
 import {
   IsEnum, IsInt, IsOptional, IsPositive, IsString, IsArray,
-  MaxLength, IsDate, Min
+  MaxLength, IsDate, Min, IsBoolean
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { JobLevel, JobType, SalaryType } from '../entities/job.entity';
@@ -53,4 +53,13 @@ export class CreateJobDto {
 
   @IsOptional() @Type(() => Date) @IsDate()
   expiresAt?: Date; // now a Date, not string
+
+  @IsOptional() @IsBoolean()
+  isUrgent?: boolean;
+
+  @IsOptional() @IsBoolean()
+  isFeatured?: boolean;
+
+  @IsOptional() @Type(() => Date) @IsDate()
+  boostedUntil?: Date;
 }

@@ -16,11 +16,13 @@ import slugify from 'slugify';
 import {
   Job,
   JobLevel,
+  JobModerationStatus,
   JobStatus,
   JobType,
 } from './entities/job.entity';
 import { ApplicationStatus } from 'src/applications/entities/application.entity';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
+import { JobRefreshEvent } from './entities/job-refresh-event.entity';
 
 function parseSalary(label?: string): { min?: number; max?: number } {
   if (!label) return {};
@@ -85,6 +87,8 @@ function isNonEmptyArray<T>(v: T[] | undefined | null): v is T[] {
 export class JobsService {
   constructor(
     @InjectRepository(Job) private repo: Repository<Job>,
+    @InjectRepository(JobRefreshEvent)
+    private refreshEventsRepo: Repository<JobRefreshEvent>,
     private readonly entitlements: EntitlementsService,
   ) {}
 
@@ -121,14 +125,29 @@ export class JobsService {
     ) {
       throw new BadRequestException('minSalary must be <= maxSalary');
     }
+    await this.assertPremiumVisibilityAccess(employerId, dto);
+
     const job = this.repo.create({
       ...dto,
       minSalary: this.toDecString(dto.minSalary),
       maxSalary: this.toDecString(dto.maxSalary),
       expiresAt: this.toDateOrUndef(dto.expiresAt),
+      boostedUntil: this.toDateOrUndef(dto.boostedUntil),
       slug: this.makeSlug(dto.title),
+      visibleAt: new Date(),
+      lastRefreshedAt: null,
       employer: { id: employerId } as any,
     } as DeepPartial<Job>);
+
+    if (dto.isFeatured) {
+      const currentFeatured = await this.countFeaturedJobs(employerId);
+      await this.entitlements.assertEmployerLimit(
+        employerId,
+        'max_featured_jobs',
+        currentFeatured,
+      );
+    }
+
     return this.repo.save(job);
   }
 
@@ -155,6 +174,9 @@ export class JobsService {
       .leftJoinAndSelect('job.employer', 'employer')
       .leftJoinAndSelect('employer.profile', 'profile')
       .where('job.status = :status', { status: JobStatus.ACTIVE })
+      .andWhere('job.moderationStatus = :moderationStatus', {
+        moderationStatus: JobModerationStatus.APPROVED,
+      })
       .andWhere('(job.expiresAt IS NULL OR job.expiresAt >= NOW())');
 
     // Free-text (MySQL case-insensitive)
@@ -312,13 +334,31 @@ export class JobsService {
     }
 
     // Sorting
+    qb.addSelect(
+      'CASE WHEN job.boostedUntil IS NOT NULL AND job.boostedUntil >= NOW() THEN 1 ELSE 0 END',
+      'job_hasActiveBoost',
+    );
+    qb.addSelect(
+      'COALESCE(job.visibleAt, job.createdAt)',
+      'job_visibilityDate',
+    );
     if (sort === 'salary') {
-      // ✅ sort by the selected alias to avoid TypeORM alias-parsing bug
-      qb.orderBy('job_effSalary', 'DESC');
+      qb.orderBy('job.isFeatured', 'DESC')
+        .addOrderBy('job_hasActiveBoost', 'DESC')
+        .addOrderBy('job.isUrgent', 'DESC')
+        .addOrderBy('job_effSalary', 'DESC')
+        .addOrderBy('job_visibilityDate', 'DESC');
     } else if (sort === 'oldest') {
-      qb.orderBy('job.createdAt', 'ASC');
+      qb.orderBy('job.isFeatured', 'DESC')
+        .addOrderBy('job_hasActiveBoost', 'DESC')
+        .addOrderBy('job.isUrgent', 'DESC')
+        .addOrderBy('job_visibilityDate', 'ASC');
     } else {
-      qb.orderBy('job.createdAt', 'DESC'); // 'new' | 'latest'
+      qb.orderBy('job.isFeatured', 'DESC')
+        .addOrderBy('job_hasActiveBoost', 'DESC')
+        .addOrderBy('job.isUrgent', 'DESC')
+        .addOrderBy('job_visibilityDate', 'DESC')
+        .addOrderBy('job.createdAt', 'DESC');
     }
 
     // Pagination (cap limit to 100)
@@ -333,7 +373,11 @@ export class JobsService {
 
   async findOneBySlug(slug: string) {
     const job = await this.repo.findOne({
-      where: { slug, status: JobStatus.ACTIVE },
+      where: {
+        slug,
+        status: JobStatus.ACTIVE,
+        moderationStatus: JobModerationStatus.APPROVED,
+      },
       relations: { employer: { profile: true } },
     });
     if (!job) throw new NotFoundException('Job not found');
@@ -371,6 +415,10 @@ export class JobsService {
       slug: j.slug,
       jobType: j.jobType,
       status: j.status,
+      isUrgent: j.isUrgent ?? false,
+      isFeatured: j.isFeatured ?? false,
+      boostedUntil: j.boostedUntil ?? null,
+      visibleAt: j.visibleAt ?? j.createdAt,
       createdAt: j.createdAt,
       expiresAt: j.expiresAt,
       applicationsCount: j.applicationsCount ?? 0,
@@ -385,8 +433,28 @@ export class JobsService {
     });
     if (!job) throw new NotFoundException('Job not found or not yours');
 
+    await this.assertPremiumVisibilityAccess(employerId, dto);
+
+    const setFeaturedOn =
+      dto.isFeatured === true && !job.isFeatured;
+    if (setFeaturedOn) {
+      const currentFeatured = await this.countFeaturedJobs(employerId, job.id);
+      await this.entitlements.assertEmployerLimit(
+        employerId,
+        'max_featured_jobs',
+        currentFeatured,
+      );
+    }
+
     if (dto.title) job.slug = this.makeSlug(dto.title);
-    Object.assign(job, dto);
+    const boostedUntil =
+      dto.boostedUntil !== undefined
+        ? this.toDateOrUndef(dto.boostedUntil) ?? null
+        : job.boostedUntil;
+    Object.assign(job, {
+      ...dto,
+      boostedUntil,
+    });
     return this.repo.save(job);
   }
 
@@ -426,10 +494,112 @@ export class JobsService {
         'max_active_jobs',
         activeJobs,
       );
+      job.visibleAt = new Date();
+    }
+
+    if (status === JobStatus.PAUSED) {
+      if (job.status !== JobStatus.ACTIVE) {
+        throw new BadRequestException('Only active jobs can be paused');
+      }
     }
 
     job.status = status;
     return this.repo.save(job);
+  }
+
+  async pause(id: number, employerId: number) {
+    return this.updateStatus(id, employerId, JobStatus.PAUSED);
+  }
+
+  async resume(id: number, employerId: number) {
+    return this.updateStatus(id, employerId, JobStatus.ACTIVE);
+  }
+
+  async duplicate(id: number, employerId: number) {
+    const source = await this.repo.findOne({
+      where: { id, employer: { id: employerId } },
+    });
+    if (!source) throw new NotFoundException('Job not found or not yours');
+
+    const cloned = this.repo.create({
+      title: source.title,
+      description: source.description,
+      responsibilities: source.responsibilities,
+      tags: source.tags,
+      role: source.role,
+      minSalary: source.minSalary,
+      maxSalary: source.maxSalary,
+      salaryType: source.salaryType,
+      jobType: source.jobType,
+      jobLevel: source.jobLevel,
+      education: source.education,
+      experience: source.experience,
+      vacancies: source.vacancies,
+      currency: source.currency,
+      location: source.location,
+      moderationStatus: source.moderationStatus,
+      moderationNote: source.moderationNote,
+      moderatedAt: source.moderatedAt,
+      moderatedByUserId: source.moderatedByUserId,
+      isUrgent: source.isUrgent,
+      isFeatured: source.isFeatured,
+      boostedUntil: source.boostedUntil ?? undefined,
+      slug: this.makeSlug(source.title),
+      status: JobStatus.DRAFT,
+      visibleAt: undefined,
+      lastRefreshedAt: undefined,
+      expiresAt: undefined,
+      employer: { id: employerId } as any,
+    } as DeepPartial<Job>);
+
+    return this.repo.save(cloned);
+  }
+
+  async refreshOrRepublish(
+    id: number,
+    employerId: number,
+    opts?: { expiresAt?: Date },
+  ) {
+    await this.entitlements.assertEmployerFeature(employerId, 'job_refresh_enabled');
+    await this.entitlements.assertEmployerMonthlyActionLimit(
+      employerId,
+      'max_job_refreshes_per_month',
+    );
+
+    const job = await this.repo.findOne({
+      where: { id, employer: { id: employerId } },
+    });
+    if (!job) throw new NotFoundException('Job not found or not yours');
+
+    if (job.status !== JobStatus.ACTIVE) {
+      const activeJobs = await this.countActiveJobs(employerId, job.id);
+      await this.entitlements.assertEmployerLimit(
+        employerId,
+        'max_active_jobs',
+        activeJobs,
+      );
+      job.status = JobStatus.ACTIVE;
+    }
+
+    const now = new Date();
+    job.visibleAt = now;
+    job.lastRefreshedAt = now;
+
+    if (opts?.expiresAt) {
+      job.expiresAt = opts.expiresAt;
+    }
+
+    await this.repo.save(job);
+    await this.refreshEventsRepo.save(
+      this.refreshEventsRepo.create({
+        employerId,
+        employer: { id: employerId } as any,
+        jobId: job.id,
+        job: { id: job.id } as any,
+      }),
+    );
+
+    return job;
   }
 
   private countActiveJobs(employerId: number, excludeJobId?: number) {
@@ -440,5 +610,34 @@ export class JobsService {
         ...(excludeJobId ? { id: Not(excludeJobId) } : {}),
       },
     });
+  }
+
+  private async countFeaturedJobs(employerId: number, excludeJobId?: number) {
+    return this.repo.count({
+      where: {
+        employer: { id: employerId },
+        isFeatured: true,
+        ...(excludeJobId ? { id: Not(excludeJobId) } : {}),
+      },
+    });
+  }
+
+  private async assertPremiumVisibilityAccess(
+    employerId: number,
+    dto: { isUrgent?: boolean; isFeatured?: boolean; boostedUntil?: Date },
+  ) {
+    if (dto.isUrgent) {
+      await this.entitlements.assertEmployerFeature(
+        employerId,
+        'urgent_jobs_enabled',
+      );
+    }
+
+    if (dto.isFeatured || dto.boostedUntil) {
+      await this.entitlements.assertEmployerFeature(
+        employerId,
+        'featured_jobs_enabled',
+      );
+    }
   }
 }
