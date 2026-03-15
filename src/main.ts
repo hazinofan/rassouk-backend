@@ -34,6 +34,8 @@ async function bootstrap() {
     credentials: true,
   });
 
+  app.setGlobalPrefix('api');
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -48,4 +50,4 @@ async function bootstrap() {
   await app.listen(process.env.PORT || 4000);
 }
 
-void bootstrap();
+bootstrap();
