@@ -28,13 +28,14 @@ export class AuthController {
     private entitlements: EntitlementsService,
   ) {}
 
-  private getCookieOptions(path = '/') {
+  private getCookieOptions() {
     const secure = process.env.NODE_ENV === 'production';
+
     return {
       httpOnly: true,
       secure,
       sameSite: 'lax' as const,
-      path,
+      path: '/',
     };
   }
 
@@ -59,12 +60,12 @@ export class AuthController {
 
     // set cookies
     res.cookie('access_token', accessToken, {
-      ...this.getCookieOptions('/'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 6, // 6 hours
     });
 
     res.cookie('refresh_token', refreshToken, {
-      ...this.getCookieOptions('/auth'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
     });
 
@@ -80,7 +81,7 @@ export class AuthController {
   googleStart(@Res() res: Response) {
     const state = crypto.randomBytes(24).toString('hex');
     res.cookie('google_oauth_state', state, {
-      ...this.getCookieOptions('/auth'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 10,
     });
 
@@ -117,15 +118,15 @@ export class AuthController {
     const { accessToken, refreshToken } =
       await this.authService.handleGoogleCode(code);
 
-    res.clearCookie('google_oauth_state', this.getCookieOptions('/auth'));
+    res.clearCookie('google_oauth_state', this.getCookieOptions());
 
     res.cookie('access_token', accessToken, {
-      ...this.getCookieOptions('/'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 6,
     });
 
     res.cookie('refresh_token', refreshToken, {
-      ...this.getCookieOptions('/auth'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
@@ -142,13 +143,13 @@ export class AuthController {
       await this.authService.refresh(refresh);
 
     res.cookie('access_token', accessToken, {
-      ...this.getCookieOptions('/'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 6, // 6 hours
     });
 
     // optional rotation of refresh token
     res.cookie('refresh_token', refreshToken, {
-      ...this.getCookieOptions('/auth'),
+      ...this.getCookieOptions(),
       maxAge: 1000 * 60 * 60 * 24 * 7,
     });
 
@@ -158,7 +159,8 @@ export class AuthController {
   @Post('logout')
   logout(@Res({ passthrough: true }) res: Response) {
     res.clearCookie('access_token', { path: '/' });
-    res.clearCookie('refresh_token', { path: '/auth' });
+    res.clearCookie('refresh_token', { path: '/' });
+    res.clearCookie('google_oauth_state', { path: '/' });
     return { ok: true };
   }
 
