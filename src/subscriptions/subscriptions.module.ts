@@ -4,8 +4,10 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
 import { Application } from 'src/applications/entities/application.entity';
+import { BillingProviderPlan } from './billing-provider-plan.entity';
 import { CandidateResume } from 'src/candidate-profile/entities/candidate-resume.entity';
 import { JobBookmark } from 'src/job-bookmark/entities/job-bookmark.entity';
+import { BillingCheckoutService } from './billing-checkout.service';
 import { Job } from 'src/jobs/entities/job.entity';
 import { SavedCandidate } from 'src/saved_candidate/entities/saved_candidate.entity';
 import { User } from 'src/users/users.entity';
@@ -15,6 +17,7 @@ import { SubscriptionEvent } from './subscription-events.entity';
 import { Subscription } from './subscription.entity';
 import { SubscriptionsController } from './subscriptions.controller';
 import { EntitlementsService } from './entitlements.service';
+import { JobRefreshEvent } from 'src/jobs/entities/job-refresh-event.entity';
 
 @Module({
   imports: [
@@ -24,7 +27,9 @@ import { EntitlementsService } from './entitlements.service';
       BillingInvoice,
       User,
       Job,
+      JobRefreshEvent,
       SavedCandidate,
+      BillingProviderPlan,
       Application,
       JobBookmark,
       CandidateResume,
@@ -36,7 +41,12 @@ import { EntitlementsService } from './entitlements.service';
     JwtModule.register({}),
   ],
   controllers: [SubscriptionsController],
-  providers: [EntitlementsService, InvoicePdfService, JwtAuthGuard],
+  providers: [
+  EntitlementsService,
+  InvoicePdfService,
+  BillingCheckoutService,
+  JwtAuthGuard,
+  ],
   exports: [EntitlementsService],
 })
 export class SubscriptionsModule {}

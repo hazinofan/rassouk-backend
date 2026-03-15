@@ -38,7 +38,7 @@ import { BlogModule } from './blog/blog.module';
           password: config.get('DB_PASS'),
           database: config.get('DB_NAME'),
           autoLoadEntities: true,
-          synchronize: dbSynchronize,
+          synchronize: true,
           logging: dbLogging,
           charset: 'utf8mb4',
           collation: 'utf8mb4_unicode_ci',
