@@ -29,12 +29,10 @@ export class AuthController {
   ) {}
 
   private getCookieOptions() {
-    const secure = process.env.NODE_ENV === 'production';
-
     return {
       httpOnly: true,
-      secure,
-      sameSite: 'lax' as const,
+      secure: true,
+      sameSite: 'none' as const,
       path: '/',
     };
   }
