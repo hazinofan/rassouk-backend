@@ -3,17 +3,14 @@ import {
   CandidatePlanKey,
   EmployerEntitlements,
   EmployerPlanKey,
+  PlanBillingConfig,
 } from './subscription.types';
 
 type EmployerPlanConfig = Omit<
   EmployerEntitlements,
   'status' | 'startedAt' | 'currentPeriodEnd'
 > & {
-  billing: {
-    priceMonthly: number;
-    currency: string;
-    label: string;
-  };
+  billing: PlanBillingConfig;
 };
 
 export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
@@ -49,6 +46,8 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       priceMonthly: 0,
       currency: 'USD',
       label: 'Free',
+      productName: 'Bghit-Nkhdem Employer Free',
+      productDescription: 'Starter employer access with essential hiring tools.',
     },
   },
   basic: {
@@ -83,6 +82,8 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       priceMonthly: 6.99,
       currency: 'USD',
       label: 'Basic',
+      productName: 'Bghit-Nkhdem Employer Basic',
+      productDescription: 'Employer subscription with candidate access and limited refreshes.',
     },
   },
   standard: {
@@ -109,7 +110,7 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       max_active_jobs: 6,
       max_saved_candidates: 25,
       cv_access_days: 30,
-      max_featured_jobs: 2,
+      max_featured_jobs: 1,
       max_job_refreshes_per_month: 15,
       max_contacted_candidates_per_month: 80,
     },
@@ -117,6 +118,8 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       priceMonthly: 14.99,
       currency: 'USD',
       label: 'Standard',
+      productName: 'Bghit-Nkhdem Employer Standard',
+      productDescription: 'Employer subscription with featured jobs and interview tools.',
     },
   },
   premium: {
@@ -143,7 +146,7 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       max_active_jobs: null,
       max_saved_candidates: 100,
       cv_access_days: 60,
-      max_featured_jobs: 10,
+      max_featured_jobs: 3,
       max_job_refreshes_per_month: null,
       max_contacted_candidates_per_month: null,
     },
@@ -151,6 +154,8 @@ export const EMPLOYER_PLANS: Record<EmployerPlanKey, EmployerPlanConfig> = {
       priceMonthly: 29.99,
       currency: 'USD',
       label: 'Premium',
+      productName: 'Bghit-Nkhdem Employer Premium',
+      productDescription: 'Full employer subscription with advanced analytics and priority support.',
     },
   },
 };
@@ -161,11 +166,7 @@ type CandidatePlanConfig = Omit<
   CandidateEntitlements,
   'status' | 'startedAt' | 'currentPeriodEnd'
 > & {
-  billing: {
-    priceMonthly: number;
-    currency: string;
-    label: string;
-  };
+  billing: PlanBillingConfig;
 };
 
 export const CANDIDATE_PLANS: Record<CandidatePlanKey, CandidatePlanConfig> = {
@@ -196,6 +197,8 @@ export const CANDIDATE_PLANS: Record<CandidatePlanKey, CandidatePlanConfig> = {
       priceMonthly: 0,
       currency: 'USD',
       label: 'Free',
+      productName: 'Bghit-Nkhdem Candidate Free',
+      productDescription: 'Basic candidate access with standard alerts and storage.',
     },
   },
   starter: {
@@ -225,6 +228,8 @@ export const CANDIDATE_PLANS: Record<CandidatePlanKey, CandidatePlanConfig> = {
       priceMonthly: 4.99,
       currency: 'USD',
       label: 'Starter',
+      productName: 'Bghit-Nkhdem Candidate Starter',
+      productDescription: 'Candidate subscription with personalized alerts and local profile boost.',
     },
   },
   pro: {
@@ -254,6 +259,8 @@ export const CANDIDATE_PLANS: Record<CandidatePlanKey, CandidatePlanConfig> = {
       priceMonthly: 9.99,
       currency: 'USD',
       label: 'Pro',
+      productName: 'Bghit-Nkhdem Candidate Pro',
+      productDescription: 'Candidate subscription with priority visibility and premium support.',
     },
   },
   elite: {
@@ -283,6 +290,8 @@ export const CANDIDATE_PLANS: Record<CandidatePlanKey, CandidatePlanConfig> = {
       priceMonthly: 19.99,
       currency: 'USD',
       label: 'Elite',
+      productName: 'Bghit-Nkhdem Candidate Elite',
+      productDescription: 'Top-tier candidate subscription with AI CV tools and VIP support.',
     },
   },
 };

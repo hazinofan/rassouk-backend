@@ -17,7 +17,10 @@ export class CandidateExperience {
   title: string; // "what he does"
 
   @Column({ type: 'smallint' })
-  year: number; // year of accomplishment
+  fromYear: number;
+
+  @Column({ type: 'smallint', nullable: true })
+  toYear?: number | null;
 
   @Column({ type: 'text', nullable: true })
   description?: string;

@@ -9,6 +9,8 @@ import {
   UpdateDateColumn,
 } from 'typeorm';
 import type {
+  BillingEnvironment,
+  BillingProvider,
   PlanKey,
   SubscriptionAudience,
   SubscriptionStatus,
@@ -48,6 +50,26 @@ export class Subscription {
 
   @Column({ type: 'timestamp', nullable: true })
   canceledAt: Date | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  provider: BillingProvider | null;
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  providerEnvironment: BillingEnvironment | null;
+
+  @Index()
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  providerCustomerId: string | null;
+
+  @Index()
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  providerSubscriptionId: string | null;
+
+  @Column({ type: 'varchar', length: 128, nullable: true })
+  providerPlanId: string | null;
+
+  @Column({ type: 'simple-json', nullable: true })
+  providerMetadata: Record<string, unknown> | null;
 
   @CreateDateColumn()
   createdAt: Date;

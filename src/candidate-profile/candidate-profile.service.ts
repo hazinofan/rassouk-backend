@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { CandidateProfile } from './entities/candidate-profile.entity';
@@ -29,8 +34,8 @@ export class CandidateProfilesService {
       where: { userId },
       relations: ['experiences', 'educations', 'resumes'],
       order: {
-        experiences: { year: 'DESC' },
-        educations: { year: 'DESC' },
+        experiences: { toYear: 'DESC', fromYear: 'DESC' },
+        educations: { toYear: 'DESC', fromYear: 'DESC' },
         resumes: { uploadedAt: 'DESC' },
       },
     });
@@ -48,6 +53,7 @@ export class CandidateProfilesService {
 
   // Experiences
   async addExperience(userId: number, dto: CreateExperienceDto) {
+    this.assertYearRange(dto.fromYear, dto.toYear);
     const exp = this.exps.create({ userId, ...dto });
     return this.exps.save(exp);
   }
@@ -55,6 +61,10 @@ export class CandidateProfilesService {
   async updateExperience(userId: number, id: number, dto: UpdateExperienceDto) {
     const exp = await this.exps.findOne({ where: { id } });
     if (!exp || exp.userId !== userId) throw new NotFoundException();
+    this.assertYearRange(
+      dto.fromYear ?? exp.fromYear,
+      dto.toYear !== undefined ? dto.toYear : exp.toYear,
+    );
     Object.assign(exp, dto);
     return this.exps.save(exp);
   }
@@ -68,6 +78,7 @@ export class CandidateProfilesService {
 
   // Educations
   async addEducation(userId: number, dto: CreateEducationDto) {
+    this.assertYearRange(dto.fromYear, dto.toYear);
     const ed = this.edus.create({ userId, ...dto });
     return this.edus.save(ed);
   }
@@ -75,6 +86,10 @@ export class CandidateProfilesService {
   async updateEducation(userId: number, id: number, dto: UpdateEducationDto) {
     const ed = await this.edus.findOne({ where: { id } });
     if (!ed || ed.userId !== userId) throw new NotFoundException();
+    this.assertYearRange(
+      dto.fromYear ?? ed.fromYear,
+      dto.toYear !== undefined ? dto.toYear : ed.toYear,
+    );
     Object.assign(ed, dto);
     return this.edus.save(ed);
   }
@@ -133,10 +148,10 @@ export class CandidateProfilesService {
         'p.updatedAt',
       ]);
 
-    // yearsExp: span using your `candidate_experiences.year`
+    // yearsExp: total span using the stored start/end years
     const yearsExpExpr = `
     (
-      SELECT IFNULL(MAX(e.year) - MIN(e.year) + 1, 0)
+      SELECT IFNULL(MAX(COALESCE(e.toYear, e.fromYear)) - MIN(e.fromYear) + 1, 0)
       FROM candidate_experiences e
       WHERE e.user_id = p.user_id
     )
@@ -149,7 +164,7 @@ export class CandidateProfilesService {
       SELECT ed.degree
       FROM candidate_educations ed
       WHERE ed.user_id = p.user_id
-      ORDER BY ed.year DESC, ed.id DESC
+      ORDER BY COALESCE(ed.toYear, ed.fromYear) DESC, ed.fromYear DESC, ed.id DESC
       LIMIT 1
     )
   `;
@@ -274,8 +289,8 @@ export class CandidateProfilesService {
       where: { userId: candidateUserId },
       relations: ['experiences', 'educations', 'resumes', 'user'],
       order: {
-        experiences: { year: 'DESC' },
-        educations: { year: 'DESC' },
+        experiences: { toYear: 'DESC', fromYear: 'DESC' },
+        educations: { toYear: 'DESC', fromYear: 'DESC' },
         resumes: { uploadedAt: 'DESC' },
       },
     });
@@ -331,5 +346,13 @@ export class CandidateProfilesService {
       startedAt.getTime() + cvAccessDays * 24 * 60 * 60 * 1000,
     );
     return cutoff >= new Date();
+  }
+
+  private assertYearRange(fromYear: number, toYear?: number | null) {
+    if (toYear != null && toYear < fromYear) {
+      throw new BadRequestException(
+        'toYear must be greater than or equal to fromYear',
+      );
+    }
   }
 }

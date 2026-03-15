@@ -8,7 +8,12 @@ import {
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
-import type { PlanKey, SubscriptionAudience } from './subscription.types';
+import type {
+  BillingEnvironment,
+  BillingProvider,
+  PlanKey,
+  SubscriptionAudience,
+} from './subscription.types';
 
 export type BillingInvoiceStatus = 'paid' | 'pending' | 'void';
 
@@ -57,7 +62,10 @@ export class BillingInvoice {
   periodEnd: Date | null;
 
   @Column({ type: 'varchar', length: 64, default: 'sandbox' })
-  provider: string;
+  provider: BillingProvider | 'sandbox';
+
+  @Column({ type: 'varchar', length: 16, nullable: true })
+  providerEnvironment: BillingEnvironment | null;
 
   @Column({ type: 'varchar', length: 128, nullable: true })
   providerRef: string | null;

@@ -158,29 +158,75 @@ export class AuthService {
         redirect_uri: this.cfg.get('GOOGLE_REDIRECT_URI')!,
         grant_type: 'authorization_code',
       }),
-    }).then((r) => r.json() as any);
+    });
 
-    const idToken = tokenRes.id_token as string;
+    if (!tokenRes.ok) {
+      throw new UnauthorizedException('Google token exchange failed');
+    }
+
+    const tokenPayload = (await tokenRes.json()) as {
+      id_token?: string;
+    };
+
+    const idToken = tokenPayload.id_token as string;
     if (!idToken) throw new Error('No id_token from Google');
 
-    // 2) Decode ID token (quick decode)
-    const payload = JSON.parse(
-      Buffer.from(idToken.split('.')[1], 'base64').toString(),
+    // 2) Verify ID token with Google
+    const verifyRes = await fetch(
+      `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`,
     );
+    if (!verifyRes.ok) {
+      throw new UnauthorizedException('Google token verification failed');
+    }
+
+    const payload = (await verifyRes.json()) as {
+      aud?: string;
+      iss?: string;
+      email?: string;
+      email_verified?: string | boolean;
+      name?: string;
+      exp?: string;
+    };
+
+    const expectedAud = this.cfg.get<string>('GOOGLE_CLIENT_ID');
+    if (!expectedAud || payload.aud !== expectedAud) {
+      throw new UnauthorizedException('Invalid Google audience');
+    }
+
+    if (
+      payload.iss !== 'https://accounts.google.com' &&
+      payload.iss !== 'accounts.google.com'
+    ) {
+      throw new UnauthorizedException('Invalid Google issuer');
+    }
+
+    const exp = Number(payload.exp ?? 0);
+    if (!Number.isFinite(exp) || exp * 1000 <= Date.now()) {
+      throw new UnauthorizedException('Expired Google token');
+    }
+
+    const emailVerified =
+      payload.email_verified === true || payload.email_verified === 'true';
+    if (!emailVerified) {
+      throw new UnauthorizedException('Google email is not verified');
+    }
+
     const email = String(payload.email ?? '')
       .toLowerCase()
       .trim();
-    if (!email) throw new Error('Google profile has no email');
+    if (!email) throw new UnauthorizedException('Google profile has no email');
 
     // 3) Find or create user + mark verified (no password needed for Google, but your schema requires one)
     let user = await this.usersService.findByEmail(email);
     if (!user) {
       const randomPassword = crypto.randomBytes(10).toString('hex');
       const passwordHash = await bcrypt.hash(randomPassword, 10);
+      const fallbackName = String(payload.name ?? email.split('@')[0] ?? 'Google user').trim();
 
       user = await this.usersService.create({
         email,
         passwordHash,
+        name: fallbackName,
         role: 'candidat',
         isOnboarded: false,
         onboardingStep: 0,
@@ -195,7 +241,7 @@ export class AuthService {
     const refreshToken = await this.signRefresh(user);
     await this.saveRefreshToken(user, refreshToken);
 
-    return { accessToken, refreshCookie: refreshToken };
+    return { accessToken, refreshToken };
   }
 
   async refresh(refreshToken?: string) {

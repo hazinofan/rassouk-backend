@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Controller,
   Post,
   Body,
@@ -16,6 +17,7 @@ import type { Request, Response } from 'express';
 import { JwtAuthGuard } from './guards/jwt.guard';
 import { UsersService } from 'src/users/users.service';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
+import * as crypto from 'crypto';
 
 @Controller('auth')
 export class AuthController {
@@ -25,6 +27,16 @@ export class AuthController {
     private usersService: UsersService,
     private entitlements: EntitlementsService,
   ) {}
+
+  private getCookieOptions(path = '/') {
+    const secure = process.env.NODE_ENV === 'production';
+    return {
+      httpOnly: true,
+      secure,
+      sameSite: 'lax' as const,
+      path,
+    };
+  }
 
   @Post('signup')
   signup(@Body() dto: SignupDto) {
@@ -47,19 +59,13 @@ export class AuthController {
 
     // set cookies
     res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production', // true in prod (HTTPS)
-      sameSite: 'lax',
+      ...this.getCookieOptions('/'),
       maxAge: 1000 * 60 * 60 * 6, // 6 hours
-      path: '/',
     });
 
     res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      ...this.getCookieOptions('/auth'),
       maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days
-      path: '/auth', // optional
     });
 
     // 👇 send token along with user
@@ -72,6 +78,12 @@ export class AuthController {
 
   @Get('google')
   googleStart(@Res() res: Response) {
+    const state = crypto.randomBytes(24).toString('hex');
+    res.cookie('google_oauth_state', state, {
+      ...this.getCookieOptions('/auth'),
+      maxAge: 1000 * 60 * 10,
+    });
+
     const params = new URLSearchParams({
       client_id: this.cfg.get<string>('GOOGLE_CLIENT_ID')!,
       redirect_uri: this.cfg.get<string>('GOOGLE_REDIRECT_URI')!,
@@ -79,6 +91,7 @@ export class AuthController {
       scope: 'openid email profile',
       access_type: 'online',
       prompt: 'consent',
+      state,
     });
     res.redirect(
       `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`,
@@ -88,21 +101,35 @@ export class AuthController {
   @Get('google/callback')
   async googleCallback(
     @Query('code') code: string,
+    @Query('state') state: string,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const { accessToken, refreshCookie } =
+    if (!code) {
+      throw new BadRequestException('Missing Google authorization code');
+    }
+
+    const expectedState = req.cookies?.['google_oauth_state'];
+    if (!state || !expectedState || state !== expectedState) {
+      throw new BadRequestException('Invalid Google OAuth state');
+    }
+
+    const { accessToken, refreshToken } =
       await this.authService.handleGoogleCode(code);
 
-    res.cookie('rt', refreshCookie, {
-      httpOnly: true,
-      sameSite: 'lax',
-      secure: false,
-      path: '/auth',
+    res.clearCookie('google_oauth_state', this.getCookieOptions('/auth'));
+
+    res.cookie('access_token', accessToken, {
+      ...this.getCookieOptions('/'),
+      maxAge: 1000 * 60 * 60 * 6,
     });
 
-    return res.redirect(
-      `${this.cfg.get('WEB_URL')}/oauth-success#at=${accessToken}`,
-    );
+    res.cookie('refresh_token', refreshToken, {
+      ...this.getCookieOptions('/auth'),
+      maxAge: 1000 * 60 * 60 * 24 * 7,
+    });
+
+    return res.redirect(`${this.cfg.get('WEB_URL')}/oauth-success`);
   }
 
   @Post('refresh')
@@ -115,20 +142,14 @@ export class AuthController {
       await this.authService.refresh(refresh);
 
     res.cookie('access_token', accessToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      ...this.getCookieOptions('/'),
       maxAge: 1000 * 60 * 60 * 6, // 6 hours
-      path: '/',
     });
 
     // optional rotation of refresh token
     res.cookie('refresh_token', refreshToken, {
-      httpOnly: true,
-      secure: true,
-      sameSite: 'lax',
+      ...this.getCookieOptions('/auth'),
       maxAge: 1000 * 60 * 60 * 24 * 7,
-      path: '/auth',
     });
 
     return { user };

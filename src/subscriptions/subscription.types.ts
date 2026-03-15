@@ -1,4 +1,6 @@
 export type SubscriptionAudience = 'employer' | 'candidate';
+export type BillingProvider = 'stripe' | 'paypal';
+export type BillingEnvironment = 'sandbox' | 'live';
 
 export type EmployerPlanKey = 'free' | 'basic' | 'standard' | 'premium';
 export type CandidatePlanKey = 'free' | 'starter' | 'pro' | 'elite';
@@ -70,6 +72,14 @@ export interface UsageCounter {
   current: number;
   limit: number | null;
   remaining: number | null;
+}
+
+export interface PlanBillingConfig {
+  priceMonthly: number;
+  currency: string;
+  label: string;
+  productName: string;
+  productDescription: string;
 }
 
 export interface EmployerUsage {
