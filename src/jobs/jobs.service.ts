@@ -90,7 +90,7 @@ export class JobsService {
     @InjectRepository(JobRefreshEvent)
     private refreshEventsRepo: Repository<JobRefreshEvent>,
     private readonly entitlements: EntitlementsService,
-  ) {}
+  ) { }
 
   private makeSlug(title: string) {
     const base = slugify(title, { lower: true, strict: true, trim: true });
@@ -639,5 +639,88 @@ export class JobsService {
         'featured_jobs_enabled',
       );
     }
+  }
+
+  async findSimilarBySlug(slug: string, limit = 6) {
+    const currentJob = await this.repo.findOne({
+      where: {
+        slug,
+        status: JobStatus.ACTIVE,
+        moderationStatus: JobModerationStatus.APPROVED,
+      },
+      relations: { employer: { profile: true } },
+    });
+
+    if (!currentJob) {
+      throw new NotFoundException('Job not found');
+    }
+
+    const take = Math.min(Math.max(Number(limit) || 6, 1), 12);
+
+    const qb = this.repo
+      .createQueryBuilder('job')
+      .leftJoinAndSelect('job.employer', 'employer')
+      .leftJoinAndSelect('employer.profile', 'profile')
+      .where('job.id != :currentJobId', { currentJobId: currentJob.id })
+      .andWhere('job.status = :status', { status: JobStatus.ACTIVE })
+      .andWhere('job.moderationStatus = :moderationStatus', {
+        moderationStatus: JobModerationStatus.APPROVED,
+      })
+      .andWhere('(job.expiresAt IS NULL OR job.expiresAt >= NOW())');
+
+    const similarityParts: string[] = [];
+    const similarityParams: Record<string, any> = {};
+
+    if (currentJob.jobType) {
+      similarityParts.push('job.jobType = :jobType');
+      similarityParams.jobType = currentJob.jobType;
+    }
+
+    if (currentJob.location?.trim()) {
+      similarityParts.push('LOWER(job.location) = :location');
+      similarityParams.location = currentJob.location.trim().toLowerCase();
+    }
+
+    if (currentJob.role?.trim()) {
+      similarityParts.push('LOWER(job.role) = :role');
+      similarityParams.role = currentJob.role.trim().toLowerCase();
+    }
+
+    if (similarityParts.length) {
+      qb.andWhere(`(${similarityParts.join(' OR ')})`, similarityParams);
+    }
+
+    qb.addSelect(
+      `
+    (
+      CASE WHEN job.jobType = :scoreJobType THEN 3 ELSE 0 END +
+      CASE WHEN LOWER(COALESCE(job.location, '')) = :scoreLocation THEN 2 ELSE 0 END +
+      CASE WHEN LOWER(COALESCE(job.role, '')) = :scoreRole THEN 2 ELSE 0 END +
+      CASE WHEN job.employerId = :scoreEmployerId THEN 1 ELSE 0 END
+    )
+    `,
+      'similarity_score',
+    )
+      .setParameter('scoreJobType', currentJob.jobType ?? '__none__')
+      .setParameter(
+        'scoreLocation',
+        currentJob.location?.trim().toLowerCase() ?? '__none__',
+      )
+      .setParameter('scoreRole', currentJob.role?.trim().toLowerCase() ?? '__none__')
+      .setParameter('scoreEmployerId', (currentJob as any).employerId ?? 0)
+      .addSelect(
+        'CASE WHEN job.boostedUntil IS NOT NULL AND job.boostedUntil >= NOW() THEN 1 ELSE 0 END',
+        'job_hasActiveBoost',
+      )
+      .addSelect('COALESCE(job.visibleAt, job.createdAt)', 'job_visibilityDate')
+      .orderBy('similarity_score', 'DESC')
+      .addOrderBy('job.isFeatured', 'DESC')
+      .addOrderBy('job_hasActiveBoost', 'DESC')
+      .addOrderBy('job.isUrgent', 'DESC')
+      .addOrderBy('job_visibilityDate', 'DESC')
+      .addOrderBy('job.createdAt', 'DESC')
+      .take(take);
+
+    return await qb.getMany();
   }
 }

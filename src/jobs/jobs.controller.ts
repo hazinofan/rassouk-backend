@@ -25,7 +25,7 @@ import { JobStatus } from './entities/job.entity';
 import { RefreshJobDto } from './dto/refresh-job.dto';
 @Controller('jobs')
 export class JobsController {
-  constructor(private readonly jobs: JobsService) {}
+  constructor(private readonly jobs: JobsService) { }
 
   // Public endpoints
   @Get()
@@ -119,5 +119,13 @@ export class JobsController {
   @Delete(':id')
   remove(@Param('id') id: string, @CurrentUser() user: any) {
     return this.jobs.softDelete(Number(id), user.id);
+  }
+
+  @Get(':slug/similar')
+  findSimilarBySlug(
+    @Param('slug') slug: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.jobs.findSimilarBySlug(slug, Number(limit) || 6);
   }
 }
