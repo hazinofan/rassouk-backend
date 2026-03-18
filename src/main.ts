@@ -51,7 +51,7 @@ async function bootstrap() {
   );
 
   app.use(cookieParser());
-  app.useStaticAssets('/app/public', { prefix: '/public' });
+  app.useStaticAssets('/app/public', { prefix: '/api/public' });
 
   await app.listen(process.env.PORT || 4000);
 }

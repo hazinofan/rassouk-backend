@@ -64,6 +64,12 @@ export class UsersController {
     return this.users.findEmployers(query);
   }
 
+  // GET /users/employers/:id/public
+  @Get('employers/:id/public')
+  async findEmployerPublic(@Param('id', ParseIntPipe) id: number) {
+    return this.users.findEmployerPublicById(id);
+  }
+
   // GET /users/:id
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
