@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  GoneException,
   UnauthorizedException,
 } from '@nestjs/common';
 import { UsersService } from 'src/users/users.service';
@@ -107,12 +108,15 @@ export class AuthService {
     });
     if (!record) throw new BadRequestException('Token invalide');
     if (record.expiresAt < new Date())
-      throw new BadRequestException('Token expiré');
+      throw new GoneException('Token expiré');
 
     await this.usersService.verifyEmail(record.user.id);
     await this.emailTokens.delete(record.id);
 
-    return { message: 'Email vérifié avec succès ✅' };
+    return {
+      success: true,
+      message: 'Email vérifié avec succès ✅',
+    };
   }
 
   async login(dto: LoginDto) {
