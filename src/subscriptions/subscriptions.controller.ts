@@ -15,6 +15,7 @@ import { CurrentUser } from 'src/auth/decorators/current-user.decoratoe';
 import { RolesGuard } from 'src/auth/decorators/roles.guard';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
 import { ChoosePlanDto } from './dto/choose-plan.dto';
+import { ConfirmPaypalCheckoutDto } from './dto/confirm-paypal-checkout.dto';
 import { CreateCheckoutSessionDto } from './dto/create-checkout-session.dto';
 import { BillingCheckoutService } from './billing-checkout.service';
 import { EntitlementsService } from './entitlements.service';
@@ -79,7 +80,7 @@ export class SubscriptionsController {
       userId: user.id,
       role: user.role,
       planKey: dto.planKey,
-      provider: dto.provider,
+      provider: dto.provider ?? 'paypal',
       successUrl: dto.successUrl,
       cancelUrl: dto.cancelUrl,
       locale: dto.locale,
@@ -101,5 +102,18 @@ export class SubscriptionsController {
     return this.entitlements
       .cancelPlanForUser(user.id, user.role)
       .then(() => this.entitlements.getBillingSnapshot(user.id));
+  }
+
+  @Post('paypal/confirm')
+  async confirmPaypalCheckout(
+    @CurrentUser() user: any,
+    @Body() dto: ConfirmPaypalCheckoutDto,
+  ) {
+    return this.billingCheckout.confirmPaypalCheckoutForUser({
+      userId: user.id,
+      role: user.role,
+      subscriptionId: dto.subscriptionId,
+      token: dto.token,
+    });
   }
 }

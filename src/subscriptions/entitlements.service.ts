@@ -4,6 +4,7 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -52,6 +53,8 @@ const SUBSCRIPTION_CACHE_TTL_MS = 30_000;
 
 @Injectable()
 export class EntitlementsService {
+  private readonly logger = new Logger(EntitlementsService.name);
+
   constructor(
     @InjectRepository(Subscription)
     private readonly subscriptionsRepo: Repository<Subscription>,
@@ -99,10 +102,18 @@ export class EntitlementsService {
     });
 
     if (!user || user.role === 'employer') {
-      return this.getEmployerBillingSnapshot(userId);
+      const snapshot = await this.getEmployerBillingSnapshot(userId);
+      this.logger.log(
+        `Billing snapshot userId=${userId} audience=employer planKey=${snapshot.planKey} status=${snapshot.status}`,
+      );
+      return snapshot;
     }
 
-    return this.getCandidateBillingSnapshot(userId);
+    const snapshot = await this.getCandidateBillingSnapshot(userId);
+    this.logger.log(
+      `Billing snapshot userId=${userId} audience=candidate planKey=${snapshot.planKey} status=${snapshot.status}`,
+    );
+    return snapshot;
   }
 
   async getEmployerEntitlements(

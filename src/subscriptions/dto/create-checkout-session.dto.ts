@@ -11,8 +11,9 @@ export class CreateCheckoutSessionDto {
     | 'pro'
     | 'elite';
 
-  @IsIn(['stripe', 'paypal'])
-  provider: 'stripe' | 'paypal';
+  @IsOptional()
+  @IsIn(['paypal'])
+  provider?: 'paypal';
 
   @IsOptional()
   @IsUrl({

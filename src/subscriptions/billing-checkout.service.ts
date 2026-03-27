@@ -45,6 +45,17 @@ type PaypalWebhookVerificationResponse = {
   verification_status?: string;
 };
 
+type PaypalSubscriptionDetails = {
+  id?: string;
+  custom_id?: string;
+  plan_id?: string;
+  status?: string;
+  status_update_time?: string;
+  billing_info?: {
+    next_billing_time?: string;
+  };
+};
+
 @Injectable()
 export class BillingCheckoutService {
   private readonly logger = new Logger(BillingCheckoutService.name);
@@ -89,15 +100,8 @@ export class BillingCheckoutService {
       throw new BadRequestException('User not found');
     }
 
-    if (params.provider === 'stripe') {
-      return this.createStripeCheckoutSession({
-        user,
-        audience,
-        planKey: params.planKey,
-        plan: plan.billing,
-        successUrl: params.successUrl,
-        cancelUrl: params.cancelUrl,
-      });
+    if (params.provider !== 'paypal') {
+      throw new BadRequestException('Stripe checkout is disabled for V1. Use PayPal.');
     }
 
     return this.createPaypalSubscription({
@@ -165,6 +169,11 @@ export class BillingCheckoutService {
     }
 
     const eventType = String(body.event_type ?? '');
+    const eventId = this.asNullableString(body.id);
+    this.logger.log(
+      `PayPal webhook received eventType=${eventType} eventId=${eventId ?? 'n/a'}`,
+    );
+
     switch (eventType) {
       case 'BILLING.SUBSCRIPTION.ACTIVATED':
       case 'BILLING.SUBSCRIPTION.UPDATED':
@@ -187,6 +196,73 @@ export class BillingCheckoutService {
     }
 
     return { received: true };
+  }
+
+  async confirmPaypalCheckoutForUser(params: {
+    userId: number;
+    role: UserRole;
+    subscriptionId?: string;
+    token?: string;
+  }) {
+    const audience = this.getAudienceFromRole(params.role);
+    const providerSubscriptionId = this.extractPaypalSubscriptionId(
+      params.subscriptionId,
+      params.token,
+    );
+
+    if (!providerSubscriptionId) {
+      throw new BadRequestException(
+        'Missing PayPal subscription token. Provide subscriptionId or token.',
+      );
+    }
+
+    const subscription = await this.getPaypalSubscription(providerSubscriptionId);
+    const context = await this.resolvePaypalContext({
+      resource: subscription as Record<string, any>,
+      providerSubscriptionId,
+      fallbackUserId: params.userId,
+      fallbackAudience: audience,
+    });
+
+    if (!context) {
+      throw new BadRequestException(
+        'Unable to map PayPal checkout to a local subscription context',
+      );
+    }
+
+    if (context.userId !== params.userId || context.audience !== audience) {
+      throw new BadRequestException('PayPal checkout token does not match current user');
+    }
+
+    const paypalStatus = this.mapPaypalSubscriptionStatus(subscription.status);
+    await this.activateExternalSubscription({
+      userId: context.userId,
+      audience: context.audience,
+      planKey: context.planKey,
+      provider: 'paypal',
+      providerEnvironment: this.getPaypalEnvironment(),
+      providerSubscriptionId: providerSubscriptionId,
+      providerPlanId: this.asNullableString(subscription.plan_id),
+      providerMetadata: {
+        confirmedVia: 'return_callback',
+        paypalStatus: subscription.status ?? null,
+      },
+      currentPeriodEnd: this.toDate(subscription.billing_info?.next_billing_time),
+      forcedStatus: paypalStatus,
+    });
+
+    this.logger.log(
+      `PayPal checkout confirmed userId=${context.userId} audience=${context.audience} planKey=${context.planKey} subscriptionId=${providerSubscriptionId}`,
+    );
+
+    return {
+      received: true,
+      provider: 'paypal' as const,
+      subscriptionId: providerSubscriptionId,
+      audience: context.audience,
+      planKey: context.planKey,
+      status: paypalStatus,
+    };
   }
 
   private async createStripeCheckoutSession(params: {
@@ -335,6 +411,9 @@ export class BillingCheckoutService {
       externalPlanId: catalog.externalPriceId,
       externalSubscriptionId: subscription.id,
     });
+    this.logger.log(
+      `PayPal checkout created userId=${params.user.id} audience=${params.audience} planKey=${params.planKey} externalPlanId=${catalog.externalPriceId} subscriptionId=${subscription.id}`,
+    );
 
     return {
       mode: 'redirect',
@@ -561,8 +640,16 @@ export class BillingCheckoutService {
 
   private async handlePaypalSubscriptionActivated(body: Record<string, unknown>) {
     const resource = (body.resource ?? {}) as Record<string, any>;
-    const context = this.parsePaypalCustomId(String(resource.custom_id ?? ''));
+    const providerSubscriptionId = this.asNullableString(resource.id);
+    const context = await this.resolvePaypalContext({
+      resource,
+      providerSubscriptionId,
+    });
+
     if (!context) {
+      this.logger.warn(
+        `PayPal activation skipped: unable to resolve context for subscriptionId=${providerSubscriptionId ?? 'n/a'}`,
+      );
       return;
     }
 
@@ -572,12 +659,14 @@ export class BillingCheckoutService {
       planKey: context.planKey,
       provider: 'paypal',
       providerEnvironment: this.getPaypalEnvironment(),
-      providerSubscriptionId: this.asNullableString(resource.id),
+      providerSubscriptionId,
       providerPlanId: this.asNullableString(resource.plan_id),
       providerMetadata: {
         statusUpdateTime: resource.status_update_time ?? null,
+        paypalStatus: resource.status ?? null,
       },
       currentPeriodEnd: this.toDate(resource.billing_info?.next_billing_time),
+      forcedStatus: this.mapPaypalSubscriptionStatus(resource.status),
     });
   }
 
@@ -587,23 +676,31 @@ export class BillingCheckoutService {
   ) {
     const resource = (body.resource ?? {}) as Record<string, any>;
     const providerSubscriptionId = this.asNullableString(resource.id);
-    if (!providerSubscriptionId) {
-      return;
-    }
-
-    const subscription = await this.subscriptionsRepo.findOne({
-      where: { provider: 'paypal', providerSubscriptionId },
-      relations: ['tenant'],
+    const context = await this.resolvePaypalContext({
+      resource,
+      providerSubscriptionId,
     });
-    if (!subscription?.tenant?.id) {
+    if (!context) {
+      this.logger.warn(
+        `PayPal status change skipped: unable to resolve context for subscriptionId=${providerSubscriptionId ?? 'n/a'} status=${status}`,
+      );
       return;
     }
 
-    subscription.status = status;
-    subscription.canceledAt = status === 'canceled' ? new Date() : subscription.canceledAt;
-    subscription.currentPeriodEnd = this.toDate(resource.billing_info?.next_billing_time);
-    await this.subscriptionsRepo.save(subscription);
-    await this.clearEntitlementsCache(subscription.audience, subscription.tenant.id);
+    await this.activateExternalSubscription({
+      userId: context.userId,
+      audience: context.audience,
+      planKey: context.planKey,
+      provider: 'paypal',
+      providerEnvironment: this.getPaypalEnvironment(),
+      providerSubscriptionId,
+      providerPlanId: this.asNullableString(resource.plan_id),
+      providerMetadata: {
+        paypalStatus: resource.status ?? null,
+      },
+      currentPeriodEnd: this.toDate(resource.billing_info?.next_billing_time),
+      forcedStatus: status,
+    });
   }
 
   private async handlePaypalPaymentCompleted(body: Record<string, unknown>) {
@@ -611,37 +708,37 @@ export class BillingCheckoutService {
     const providerSubscriptionId =
       this.asNullableString(resource.billing_agreement_id) ??
       this.asNullableString(resource.subscription_id);
-
-    if (!providerSubscriptionId) {
-      return;
-    }
-
-    const subscription = await this.subscriptionsRepo.findOne({
-      where: { provider: 'paypal', providerSubscriptionId },
-      relations: ['tenant'],
+    const context = await this.resolvePaypalContext({
+      resource,
+      providerSubscriptionId,
     });
-    if (!subscription?.tenant?.id) {
+    if (!context) {
+      this.logger.warn(
+        `PayPal payment completed skipped: unable to resolve context for subscriptionId=${providerSubscriptionId ?? 'n/a'} saleId=${String(resource.id ?? '')}`,
+      );
       return;
     }
 
     await this.activateExternalSubscription({
-      userId: subscription.tenant.id,
-      audience: subscription.audience,
-      planKey: this.getPlanKeyForAudience(subscription.audience, subscription.planKey),
+      userId: context.userId,
+      audience: context.audience,
+      planKey: context.planKey,
       provider: 'paypal',
       providerEnvironment: this.getPaypalEnvironment(),
       providerSubscriptionId,
       providerPlanId: this.asNullableString(resource.billing_plan_id),
       providerMetadata: {
         paypalSaleId: resource.id ?? null,
+        paypalStatus: resource.status ?? null,
       },
       currentPeriodEnd: null,
+      forcedStatus: 'active',
     });
 
     await this.upsertInvoice({
-      userId: subscription.tenant.id,
-      audience: subscription.audience,
-      planKey: this.getPlanKeyForAudience(subscription.audience, subscription.planKey),
+      userId: context.userId,
+      audience: context.audience,
+      planKey: context.planKey,
       amount: String(resource.amount?.total ?? resource.amount?.value ?? '0.00'),
       currency: String(
         resource.amount?.currency ?? resource.amount?.currency_code ?? 'USD',
@@ -667,6 +764,7 @@ export class BillingCheckoutService {
     providerPlanId?: string | null;
     providerMetadata?: Record<string, unknown> | null;
     currentPeriodEnd?: Date | null;
+    forcedStatus?: SubscriptionStatus;
   }) {
     const existing = await this.subscriptionsRepo.findOne({
       where: {
@@ -681,13 +779,16 @@ export class BillingCheckoutService {
     subscription.tenant = { id: params.userId } as User;
     subscription.audience = params.audience;
     subscription.planKey = params.planKey;
-    subscription.status = 'active';
+    subscription.status = params.forcedStatus ?? 'active';
     subscription.startedAt = subscription.startedAt ?? now;
     subscription.currentPeriodEnd =
       params.currentPeriodEnd ??
       subscription.currentPeriodEnd ??
       new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
-    subscription.canceledAt = null;
+    subscription.canceledAt =
+      subscription.status === 'canceled'
+        ? subscription.canceledAt ?? now
+        : null;
     subscription.provider = params.provider;
     subscription.providerEnvironment = params.providerEnvironment;
     subscription.providerCustomerId =
@@ -700,8 +801,11 @@ export class BillingCheckoutService {
       ...(params.providerMetadata ?? {}),
     };
 
-    await this.subscriptionsRepo.save(subscription);
+    const saved = await this.subscriptionsRepo.save(subscription);
     await this.clearEntitlementsCache(params.audience, params.userId);
+    this.logger.log(
+      `Subscription upserted userId=${params.userId} audience=${params.audience} planKey=${saved.planKey} status=${saved.status} provider=${params.provider} subscriptionId=${params.providerSubscriptionId ?? 'n/a'}`,
+    );
   }
 
   private async upsertInvoice(params: {
@@ -756,6 +860,9 @@ export class BillingCheckoutService {
     invoice.paidAt = params.status === 'paid' ? now : invoice.paidAt;
 
     await this.billingInvoicesRepo.save(invoice);
+    this.logger.log(
+      `Invoice upserted userId=${params.userId} audience=${params.audience} planKey=${params.planKey} provider=${params.provider} providerRef=${params.providerRef} status=${params.status}`,
+    );
   }
 
   private async verifyPaypalWebhookSignature(
@@ -1011,6 +1118,125 @@ export class BillingCheckoutService {
       audience: parsedAudience,
       planKey: this.getPlanKeyForAudience(parsedAudience, rawPlanKey),
     };
+  }
+
+  private async getPaypalSubscription(subscriptionId: string) {
+    return this.paypalRequest<PaypalSubscriptionDetails>(
+      `/v1/billing/subscriptions/${subscriptionId}`,
+      { method: 'GET' },
+    );
+  }
+
+  private extractPaypalSubscriptionId(
+    subscriptionId?: string,
+    token?: string,
+  ) {
+    const direct = this.asNullableString(subscriptionId);
+    if (direct) {
+      return direct;
+    }
+
+    const rawToken = this.asNullableString(token);
+    if (!rawToken) {
+      return null;
+    }
+
+    try {
+      const parsed = new URL(rawToken);
+      return (
+        this.asNullableString(parsed.searchParams.get('ba_token')) ??
+        this.asNullableString(parsed.searchParams.get('token')) ??
+        rawToken
+      );
+    } catch {
+      return rawToken;
+    }
+  }
+
+  private mapPaypalSubscriptionStatus(value: unknown): SubscriptionStatus {
+    const normalized = String(value ?? '').toUpperCase();
+    switch (normalized) {
+      case 'SUSPENDED':
+        return 'past_due';
+      case 'CANCELLED':
+      case 'EXPIRED':
+        return 'canceled';
+      case 'APPROVAL_PENDING':
+      case 'APPROVED':
+        return 'trialing';
+      default:
+        return 'active';
+    }
+  }
+
+  private async resolvePaypalContext(params: {
+    resource: Record<string, any>;
+    providerSubscriptionId?: string | null;
+    fallbackUserId?: number;
+    fallbackAudience?: SubscriptionAudience;
+  }) {
+    const custom = this.parsePaypalCustomId(String(params.resource.custom_id ?? ''));
+    const providerPlanId =
+      this.asNullableString(params.resource.plan_id) ??
+      this.asNullableString(params.resource.billing_plan_id);
+
+    const existingBySubscriptionId = params.providerSubscriptionId
+      ? await this.subscriptionsRepo.findOne({
+          where: {
+            provider: 'paypal',
+            providerSubscriptionId: params.providerSubscriptionId,
+          },
+          relations: ['tenant'],
+        })
+      : null;
+
+    const mappedPlan = providerPlanId
+      ? await this.findPaypalPlanMapping(providerPlanId, custom?.audience ?? params.fallbackAudience)
+      : null;
+
+    const audience =
+      custom?.audience ??
+      existingBySubscriptionId?.audience ??
+      mappedPlan?.audience ??
+      params.fallbackAudience;
+
+    const planKey = this.getPlanKeyForAudience(
+      audience ?? 'candidate',
+      custom?.planKey ??
+        existingBySubscriptionId?.planKey ??
+        mappedPlan?.planKey ??
+        'free',
+    );
+
+    const userId =
+      custom?.userId ??
+      existingBySubscriptionId?.tenant?.id ??
+      params.fallbackUserId;
+
+    if (!userId || !audience) {
+      return null;
+    }
+
+    return {
+      userId,
+      audience,
+      planKey,
+    };
+  }
+
+  private async findPaypalPlanMapping(
+    externalPlanId: string,
+    audience?: SubscriptionAudience,
+  ) {
+    const baseWhere = {
+      provider: 'paypal' as const,
+      environment: this.getPaypalEnvironment(),
+      externalPriceId: externalPlanId,
+    };
+
+    return this.billingProviderPlansRepo.findOne({
+      where: audience ? { ...baseWhere, audience } : baseWhere,
+    });
   }
 
   private mapStripeSubscriptionStatus(value: string): SubscriptionStatus {

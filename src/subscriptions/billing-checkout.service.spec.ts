@@ -57,6 +57,8 @@ describe('BillingCheckoutService', () => {
                 STRIPE_ENV: 'sandbox',
                 WEB_URL: 'http://localhost:3000',
                 PAYPAL_ENV: 'sandbox',
+                PAYPAL_CLIENT_ID: 'paypal_client',
+                PAYPAL_CLIENT_SECRET: 'paypal_secret',
               };
               return values[key];
             }),
@@ -96,43 +98,24 @@ describe('BillingCheckoutService', () => {
     expect(usersRepo.findOne).not.toHaveBeenCalled();
   });
 
-  it('creates a Stripe checkout session for paid plans', async () => {
+  it('rejects Stripe for paid plans', async () => {
     usersRepo.findOne.mockResolvedValue({
       id: 3,
       email: 'billing@acme.test',
       name: 'Acme Recruiter',
       role: 'employer',
     });
-    fetchSpy.mockResolvedValue({
-      ok: true,
-      json: async () => ({
-        id: 'cs_test_123',
-        url: 'https://checkout.stripe.com/c/pay/cs_test_123',
-      }),
-    } as Response);
 
-    const result = await service.createCheckoutSession({
-      userId: 3,
-      role: 'employer',
-      planKey: 'premium',
-      provider: 'stripe',
-    });
-
-    expect(result).toEqual({
-      mode: 'redirect',
-      provider: 'stripe',
-      checkoutId: 'cs_test_123',
-      approvalUrl: 'https://checkout.stripe.com/c/pay/cs_test_123',
-    });
-    expect(fetchSpy).toHaveBeenCalledWith(
-      'https://api.stripe.com/v1/checkout/sessions',
-      expect.objectContaining({
-        method: 'POST',
-        headers: expect.objectContaining({
-          Authorization: 'Bearer sk_test_123',
-        }),
+    await expect(
+      service.createCheckoutSession({
+        userId: 3,
+        role: 'employer',
+        planKey: 'premium',
+        provider: 'stripe',
       }),
-    );
+    ).rejects.toBeInstanceOf(BadRequestException);
+
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it('rejects Stripe webhooks with an invalid signature', async () => {
@@ -160,5 +143,60 @@ describe('BillingCheckoutService', () => {
     await expect(
       service.handlePaypalWebhook({ header: jest.fn() } as any, {}),
     ).rejects.toBeInstanceOf(ServiceUnavailableException);
+  });
+
+  it('confirms PayPal checkout and activates canonical subscription state', async () => {
+    subscriptionsRepo.findOne
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(null);
+    subscriptionsRepo.save.mockResolvedValue({
+      id: 10,
+      planKey: 'standard',
+      status: 'active',
+    });
+
+    fetchSpy
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ access_token: 'token_123' }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          id: 'I-TEST123',
+          custom_id: '42:employer:standard',
+          plan_id: 'P-TEST123',
+          status: 'ACTIVE',
+          billing_info: {
+            next_billing_time: '2026-05-01T00:00:00Z',
+          },
+        }),
+      } as Response);
+
+    const result = await service.confirmPaypalCheckoutForUser({
+      userId: 42,
+      role: 'employer',
+      token: 'I-TEST123',
+    });
+
+    expect(result).toEqual({
+      received: true,
+      provider: 'paypal',
+      subscriptionId: 'I-TEST123',
+      audience: 'employer',
+      planKey: 'standard',
+      status: 'active',
+    });
+
+    expect(subscriptionsRepo.save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        audience: 'employer',
+        planKey: 'standard',
+        status: 'active',
+        provider: 'paypal',
+        providerSubscriptionId: 'I-TEST123',
+      }),
+    );
+    expect(cache.del).toHaveBeenCalledWith('employer-entitlements:42');
   });
 });

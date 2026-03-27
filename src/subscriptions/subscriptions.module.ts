@@ -15,6 +15,7 @@ import { BillingInvoice } from './billing-invoice.entity';
 import { InvoicePdfService } from './invoice-pdf.service';
 import { SubscriptionEvent } from './subscription-events.entity';
 import { Subscription } from './subscription.entity';
+import { BillingWebhooksController } from './billing-webhooks.controller';
 import { SubscriptionsController } from './subscriptions.controller';
 import { EntitlementsService } from './entitlements.service';
 import { JobRefreshEvent } from 'src/jobs/entities/job-refresh-event.entity';
@@ -33,6 +34,7 @@ import { JobRefreshEvent } from 'src/jobs/entities/job-refresh-event.entity';
       Application,
       JobBookmark,
       CandidateResume,
+      JobRefreshEvent,
     ]),
     CacheModule.register({
       ttl: 30,
@@ -40,7 +42,7 @@ import { JobRefreshEvent } from 'src/jobs/entities/job-refresh-event.entity';
     }),
     JwtModule.register({}),
   ],
-  controllers: [SubscriptionsController],
+  controllers: [SubscriptionsController, BillingWebhooksController],
   providers: [
   EntitlementsService,
   InvoicePdfService,
