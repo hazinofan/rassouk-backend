@@ -1,9 +1,14 @@
 import {
   IsEnum, IsInt, IsOptional, IsPositive, IsString, IsArray,
-  MaxLength, IsDate, Min, IsBoolean
+  MaxLength, IsDate, Min, IsBoolean, IsUrl
 } from 'class-validator';
 import { Type } from 'class-transformer';
-import { JobLevel, JobType, SalaryType } from '../entities/job.entity';
+import {
+  JobApplicationMode,
+  JobLevel,
+  JobType,
+  SalaryType,
+} from '../entities/job.entity';
 
 export class CreateJobDto {
   @IsString() @MaxLength(180)
@@ -50,6 +55,12 @@ export class CreateJobDto {
 
   @IsOptional() @IsString()
   location?: string;
+
+  @IsOptional() @IsEnum(JobApplicationMode)
+  applicationMode?: JobApplicationMode;
+
+  @IsOptional() @IsUrl({ require_protocol: true }) @MaxLength(2048)
+  externalApplyUrl?: string | null;
 
   @IsOptional() @Type(() => Date) @IsDate()
   expiresAt?: Date; // now a Date, not string
