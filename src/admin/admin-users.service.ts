@@ -6,9 +6,12 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import * as bcrypt from 'bcrypt';
+import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
+import { CandidateResume } from 'src/candidate-profile/entities/candidate-resume.entity';
 import { MailService } from 'src/mail/mail.service';
 import { User } from 'src/users/users.entity';
-import { Repository } from 'typeorm';
+import { Repository, SelectQueryBuilder } from 'typeorm';
+import { AdminCvLibraryQueryDto } from './dto/admin-cv-library-query.dto';
 import { AdminBanUserDto } from './dto/admin-ban-user.dto';
 import { AdminCreateAdminUserDto } from './dto/admin-create-admin-user.dto';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
@@ -18,6 +21,8 @@ export class AdminUsersService {
   constructor(
     @InjectRepository(User)
     private readonly usersRepo: Repository<User>,
+    @InjectRepository(CandidateResume)
+    private readonly resumesRepo: Repository<CandidateResume>,
     private readonly mail: MailService,
   ) {}
 
@@ -29,6 +34,219 @@ export class AdminUsersService {
       value += chars[Math.floor(Math.random() * chars.length)];
     }
     return value;
+  }
+
+  private buildCvLibraryQuery(query: AdminCvLibraryQueryDto) {
+    const qb = this.resumesRepo
+      .createQueryBuilder('resume')
+      .innerJoin(CandidateProfile, 'profile', 'profile.userId = resume.userId')
+      .innerJoin(User, 'user', 'user.id = resume.userId')
+      .where('user.role = :role', { role: 'candidat' })
+      .select([
+        'resume.id AS resumeId',
+        'resume.userId AS candidateUserId',
+        'resume.filePath AS filePath',
+        'resume.label AS label',
+        'resume.uploadedAt AS uploadedAt',
+        'user.email AS email',
+        'user.name AS accountName',
+        'profile.firstName AS firstName',
+        'profile.lastName AS lastName',
+        'profile.headline AS headline',
+        'profile.city AS city',
+      ]);
+
+    if (query.q?.trim()) {
+      const term = `%${query.q.trim()}%`;
+      qb.andWhere(
+        `(
+          user.email LIKE :term
+          OR user.name LIKE :term
+          OR profile.firstName LIKE :term
+          OR profile.lastName LIKE :term
+          OR CONCAT(profile.firstName, ' ', profile.lastName) LIKE :term
+          OR resume.label LIKE :term
+        )`,
+        { term },
+      );
+    }
+
+    if (query.city?.trim()) {
+      qb.andWhere('profile.city LIKE :city', {
+        city: `%${query.city.trim()}%`,
+      });
+    }
+
+    if (query.candidateUserId) {
+      qb.andWhere('resume.userId = :candidateUserId', {
+        candidateUserId: query.candidateUserId,
+      });
+    }
+
+    if (query.uploadedFrom) {
+      qb.andWhere('resume.uploadedAt >= :uploadedFrom', {
+        uploadedFrom: new Date(query.uploadedFrom),
+      });
+    }
+
+    if (query.uploadedTo) {
+      const uploadedTo = new Date(query.uploadedTo);
+      uploadedTo.setHours(23, 59, 59, 999);
+      qb.andWhere('resume.uploadedAt <= :uploadedTo', {
+        uploadedTo,
+      });
+    }
+
+    if (query.sortBy === 'candidateName') {
+      qb.orderBy('profile.firstName', query.sortDir ?? 'DESC').addOrderBy(
+        'profile.lastName',
+        query.sortDir ?? 'DESC',
+      );
+    } else if (query.sortBy === 'email') {
+      qb.orderBy('user.email', query.sortDir ?? 'DESC');
+    } else {
+      qb.orderBy('resume.uploadedAt', query.sortDir ?? 'DESC');
+    }
+
+    return qb;
+  }
+
+  private mapCvLibraryRow(row: Record<string, any>) {
+    return {
+      resumeId: Number(row.resumeId),
+      candidateUserId: Number(row.candidateUserId),
+      candidateName:
+        [row.firstName, row.lastName].filter(Boolean).join(' ').trim() ||
+        row.accountName,
+      firstName: row.firstName ?? null,
+      lastName: row.lastName ?? null,
+      email: row.email,
+      headline: row.headline ?? null,
+      city: row.city ?? null,
+      label: row.label ?? null,
+      filePath: row.filePath,
+      uploadedAt: row.uploadedAt,
+    };
+  }
+
+  private escapeCsvValue(value: unknown) {
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    const stringValue = String(value).replace(/"/g, '""');
+    return /[",\n]/.test(stringValue) ? `"${stringValue}"` : stringValue;
+  }
+
+  private escapeXml(value: unknown) {
+    if (value === null || value === undefined) {
+      return '';
+    }
+
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&apos;');
+  }
+
+  private buildCvLibraryCsv(rows: Array<Record<string, any>>) {
+    const headers = [
+      'resumeId',
+      'candidateUserId',
+      'candidateName',
+      'firstName',
+      'lastName',
+      'email',
+      'headline',
+      'city',
+      'label',
+      'filePath',
+      'uploadedAt',
+    ];
+
+    const lines = [
+      headers.join(','),
+      ...rows.map((row) =>
+        headers.map((header) => this.escapeCsvValue(row[header])).join(','),
+      ),
+    ];
+
+    return `\uFEFF${lines.join('\n')}`;
+  }
+
+  private buildCvLibraryExcel(rows: Array<Record<string, any>>) {
+    const headers = [
+      'Resume ID',
+      'Candidate User ID',
+      'Candidate Name',
+      'First Name',
+      'Last Name',
+      'Email',
+      'Headline',
+      'City',
+      'Label',
+      'File Path',
+      'Uploaded At',
+    ];
+
+    const headerXml = headers
+      .map(
+        (header) =>
+          `<Cell ss:StyleID="header"><Data ss:Type="String">${this.escapeXml(header)}</Data></Cell>`,
+      )
+      .join('');
+
+    const rowsXml = rows
+      .map((row) => {
+        const cells = [
+          row.resumeId,
+          row.candidateUserId,
+          row.candidateName,
+          row.firstName,
+          row.lastName,
+          row.email,
+          row.headline,
+          row.city,
+          row.label,
+          row.filePath,
+          row.uploadedAt,
+        ]
+          .map(
+            (value) =>
+              `<Cell><Data ss:Type="String">${this.escapeXml(value)}</Data></Cell>`,
+          )
+          .join('');
+
+        return `<Row>${cells}</Row>`;
+      })
+      .join('');
+
+    return `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+ <Styles>
+  <Style ss:ID="header">
+   <Font ss:Bold="1"/>
+  </Style>
+ </Styles>
+ <Worksheet ss:Name="CV Library">
+  <Table>
+   <Row>${headerXml}</Row>
+   ${rowsXml}
+  </Table>
+ </Worksheet>
+</Workbook>`;
+  }
+
+  private async getCvLibraryRows(query: AdminCvLibraryQueryDto) {
+    const rows = await this.buildCvLibraryQuery(query).getRawMany();
+    return rows.map((row) => this.mapCvLibraryRow(row));
   }
 
   async list(query: AdminUserQueryDto) {
@@ -73,6 +291,36 @@ export class AdminUsersService {
       page,
       limit,
     };
+  }
+
+  async listCvLibrary(query: AdminCvLibraryQueryDto) {
+    const page = Math.max(1, Number(query.page) || 1);
+    const limit = Math.min(100, Math.max(1, Number(query.limit) || 20));
+    const skip = (page - 1) * limit;
+    const qb = this.buildCvLibraryQuery(query);
+    qb.skip(skip).take(limit);
+
+    const [rows, total] = await Promise.all([
+      qb.getRawMany(),
+      this.buildCvLibraryQuery(query).getCount(),
+    ]);
+
+    return {
+      data: rows.map((row) => this.mapCvLibraryRow(row)),
+      total,
+      page,
+      limit,
+    };
+  }
+
+  async exportCvLibraryCsv(query: AdminCvLibraryQueryDto) {
+    const rows = await this.getCvLibraryRows(query);
+    return this.buildCvLibraryCsv(rows);
+  }
+
+  async exportCvLibraryExcel(query: AdminCvLibraryQueryDto) {
+    const rows = await this.getCvLibraryRows(query);
+    return this.buildCvLibraryExcel(rows);
   }
 
   async getById(id: number) {

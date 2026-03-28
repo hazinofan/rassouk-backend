@@ -2,11 +2,11 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
 import { ApplicationsService } from './applications.service';
 import { Application } from './entities/application.entity';
-import { Job } from 'src/jobs/entities/job.entity';
+import { Job, JobApplicationMode, JobStatus } from 'src/jobs/entities/job.entity';
 import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
 import { MailService } from 'src/mail/mail.service';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
-import { ForbiddenException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException } from '@nestjs/common';
 import { NotificationsService } from 'src/notifications/notifications.service';
 
 describe('ApplicationsService', () => {
@@ -14,11 +14,22 @@ describe('ApplicationsService', () => {
   const appRepo = {
     count: jest.fn(),
     findOne: jest.fn(),
+    exists: jest.fn(),
+    create: jest.fn(),
+    save: jest.fn(),
   };
-  const jobRepo = {};
-  const profileRepo = {};
-  const mail = {};
-  const notifications = {};
+  const jobRepo = {
+    findOne: jest.fn(),
+  };
+  const profileRepo = {
+    findOne: jest.fn(),
+  };
+  const mail = {
+    sendApplicationConfirmation: jest.fn(),
+  };
+  const notifications = {
+    create: jest.fn(),
+  };
   const entitlements = {
     getMonthBetweenClause: jest.fn(),
     assertCandidateLimit: jest.fn(),
@@ -106,5 +117,23 @@ describe('ApplicationsService', () => {
     await expect(
       service.getAppById(9, { id: 99, role: 'candidat' }),
     ).rejects.toBeInstanceOf(ForbiddenException);
+  });
+
+  it('blocks direct internal applications for external jobs', async () => {
+    const monthRange = {} as any;
+    entitlements.getMonthBetweenClause.mockReturnValue(monthRange);
+    entitlements.assertCandidateLimit.mockResolvedValue(undefined);
+    appRepo.count.mockResolvedValue(0);
+    jobRepo.findOne.mockResolvedValue({
+      id: 12,
+      title: 'Backend Engineer',
+      status: JobStatus.ACTIVE,
+      applicationMode: JobApplicationMode.EXTERNAL,
+      expiresAt: null,
+    });
+
+    await expect(service.create(12, 44, {} as any)).rejects.toBeInstanceOf(
+      BadRequestException,
+    );
   });
 });

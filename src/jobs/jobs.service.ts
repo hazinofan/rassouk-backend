@@ -11,6 +11,7 @@ import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
 import {
   Job,
+  JobApplicationMode,
   JobLevel,
   JobModerationStatus,
   JobStatus,
@@ -106,6 +107,47 @@ export class JobsService {
     return n.toFixed(2);
   }
 
+  private resolveApplicationFields(input: {
+    applicationMode?: JobApplicationMode;
+    externalApplyUrl?: string | null;
+  }): Pick<Job, 'applicationMode' | 'externalApplyUrl'> {
+    const applicationMode =
+      input.applicationMode ?? JobApplicationMode.INTERNAL;
+    const externalApplyUrl =
+      typeof input.externalApplyUrl === 'string'
+        ? input.externalApplyUrl.trim()
+        : input.externalApplyUrl;
+
+    if (applicationMode === JobApplicationMode.EXTERNAL) {
+      if (!externalApplyUrl) {
+        throw new BadRequestException(
+          'externalApplyUrl is required when applicationMode is EXTERNAL',
+        );
+      }
+
+      try {
+        const parsed = new URL(externalApplyUrl);
+        if (!parsed.protocol || !parsed.host) {
+          throw new Error('invalid');
+        }
+      } catch {
+        throw new BadRequestException(
+          'externalApplyUrl must be a valid absolute URL when applicationMode is EXTERNAL',
+        );
+      }
+
+      return {
+        applicationMode,
+        externalApplyUrl,
+      };
+    }
+
+    return {
+      applicationMode: JobApplicationMode.INTERNAL,
+      externalApplyUrl: null,
+    };
+  }
+
   async create(dto: CreateJobDto, employerId: number) {
     const activeJobs = await this.countActiveJobs(employerId);
     await this.entitlements.assertEmployerLimit(
@@ -122,9 +164,11 @@ export class JobsService {
       throw new BadRequestException('minSalary must be <= maxSalary');
     }
     await this.assertPremiumVisibilityAccess(employerId, dto);
+    const applicationFields = this.resolveApplicationFields(dto);
 
     const job = this.repo.create({
       ...dto,
+      ...applicationFields,
       minSalary: this.toDecString(dto.minSalary),
       maxSalary: this.toDecString(dto.maxSalary),
       expiresAt: this.toDateOrUndef(dto.expiresAt),
@@ -411,6 +455,8 @@ export class JobsService {
       slug: j.slug,
       jobType: j.jobType,
       status: j.status,
+      applicationMode: j.applicationMode,
+      externalApplyUrl: j.externalApplyUrl ?? null,
       isUrgent: j.isUrgent ?? false,
       isFeatured: j.isFeatured ?? false,
       boostedUntil: j.boostedUntil ?? null,
@@ -442,12 +488,20 @@ export class JobsService {
     }
 
     if (dto.title) job.slug = this.makeSlug(dto.title);
+    const applicationFields = this.resolveApplicationFields({
+      applicationMode: dto.applicationMode ?? job.applicationMode,
+      externalApplyUrl:
+        dto.externalApplyUrl !== undefined
+          ? dto.externalApplyUrl
+          : job.externalApplyUrl,
+    });
     const boostedUntil =
       dto.boostedUntil !== undefined
         ? (this.toDateOrUndef(dto.boostedUntil) ?? null)
         : job.boostedUntil;
     Object.assign(job, {
       ...dto,
+      ...applicationFields,
       boostedUntil,
     });
     return this.repo.save(job);
@@ -532,6 +586,8 @@ export class JobsService {
       vacancies: source.vacancies,
       currency: source.currency,
       location: source.location,
+      applicationMode: source.applicationMode,
+      externalApplyUrl: source.externalApplyUrl ?? null,
       moderationStatus: source.moderationStatus,
       moderationNote: source.moderationNote,
       moderatedAt: source.moderatedAt,

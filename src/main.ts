@@ -18,6 +18,7 @@ async function bootstrap() {
     rawBody: true,
   });
   const config = app.get(ConfigService);
+  const publicDir = join(process.cwd(), 'public');
   const webUrl = config.get<string>('WEB_URL');
   const nodeEnv = config.get<string>('NODE_ENV') ?? 'development';
   const configuredOrigins = parseCorsOrigins(
@@ -51,7 +52,8 @@ async function bootstrap() {
   );
 
   app.use(cookieParser());
-  app.useStaticAssets('/app/public', { prefix: '/api/public' });
+  app.useStaticAssets(publicDir, { prefix: '/api/public' });
+  app.useStaticAssets(publicDir, { prefix: '/public' });
 
   await app.listen(process.env.PORT || 4000);
 }

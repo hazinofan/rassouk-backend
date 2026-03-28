@@ -3,6 +3,7 @@ import {
   Controller,
   Delete,
   Get,
+  Header,
   Param,
   ParseIntPipe,
   Patch,
@@ -16,6 +17,7 @@ import { RolesGuard } from 'src/auth/decorators/roles.guard';
 import { CurrentUser } from 'src/auth/decorators/current-user.decoratoe';
 import { JwtAuthGuard } from 'src/auth/guards/jwt.guard';
 import { AdminAuditService } from './admin-audit.service';
+import { AdminCvLibraryQueryDto } from './dto/admin-cv-library-query.dto';
 import { AdminBanUserDto } from './dto/admin-ban-user.dto';
 import { AdminCreateAdminUserDto } from './dto/admin-create-admin-user.dto';
 import { AdminUserQueryDto } from './dto/admin-user-query.dto';
@@ -33,6 +35,31 @@ export class AdminUsersController {
   @Get()
   list(@Query() query: AdminUserQueryDto) {
     return this.users.list(query);
+  }
+
+  @Get('cv-library')
+  listCvLibrary(@Query() query: AdminCvLibraryQueryDto) {
+    return this.users.listCvLibrary(query);
+  }
+
+  @Get('cv-library/export.csv')
+  @Header('Content-Type', 'text/csv; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="admin-cv-library-export.csv"',
+  )
+  exportCvLibraryCsv(@Query() query: AdminCvLibraryQueryDto) {
+    return this.users.exportCvLibraryCsv(query);
+  }
+
+  @Get('cv-library/export.xls')
+  @Header('Content-Type', 'application/vnd.ms-excel; charset=utf-8')
+  @Header(
+    'Content-Disposition',
+    'attachment; filename="admin-cv-library-export.xls"',
+  )
+  exportCvLibraryExcel(@Query() query: AdminCvLibraryQueryDto) {
+    return this.users.exportCvLibraryExcel(query);
   }
 
   @Post()

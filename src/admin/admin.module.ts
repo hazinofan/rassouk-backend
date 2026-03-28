@@ -1,6 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from 'src/auth/auth.module';
+import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
+import { CandidateResume } from 'src/candidate-profile/entities/candidate-resume.entity';
 import { Job } from 'src/jobs/entities/job.entity';
 import { MailModule } from 'src/mail/mail.module';
 import { BillingInvoice } from 'src/subscriptions/billing-invoice.entity';
@@ -22,6 +24,8 @@ import { AdminAuditLog } from './entities/admin-audit-log.entity';
   imports: [
     TypeOrmModule.forFeature([
       User,
+      CandidateProfile,
+      CandidateResume,
       Job,
       SupportMessage,
       Subscription,
