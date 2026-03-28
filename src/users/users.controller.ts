@@ -30,6 +30,19 @@ export class UsersController {
     return rest;
   }
 
+  private ensureSelfOrAdmin(req: any, targetUserId: number) {
+    const requesterRole = String(req.user?.role || '').toLowerCase();
+    const requesterId = Number(req.user?.id);
+
+    if (requesterRole === 'admin') return;
+
+    if (requesterId !== targetUserId) {
+      throw new ForbiddenException(
+        'You can only update onboarding for your own user',
+      );
+    }
+  }
+
   // POST /users
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
@@ -103,8 +116,12 @@ export class UsersController {
   // PATCH /users/:id/onboarding → set isOnboarded = true
   @Patch(':id/onboarding')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
-  async completeOnboarding(@Param('id', ParseIntPipe) id: number) {
+  @Roles('admin', 'employer', 'candidat')
+  async completeOnboarding(
+    @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
+  ) {
+    this.ensureSelfOrAdmin(req, id);
     const updated = await this.users.updatePartial(id, {
       isOnboarded: true,
     });
@@ -114,11 +131,13 @@ export class UsersController {
   // PATCH /users/:id/onboarding-step → update onboardingStep
   @Patch(':id/onboarding-step')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'employer', 'candidat')
   async setStep(
     @Param('id', ParseIntPipe) id: number,
+    @Req() req: any,
     @Body('step') step: number,
   ) {
+    this.ensureSelfOrAdmin(req, id);
     if (typeof step !== 'number') {
       throw new BadRequestException('step must be a number');
     }
