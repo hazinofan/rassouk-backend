@@ -91,4 +91,7 @@ export class User {
 
   @DeleteDateColumn()
   deletedAt?: Date;
+
+  @Column({ type: 'timestamp', nullable: true })
+  accountDeletedAt: Date | null;
 }

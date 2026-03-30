@@ -19,6 +19,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { SupportModule } from './support/support.module';
 import { AdminModule } from './admin/admin.module';
 import { BlogModule } from './blog/blog.module';
+import { TypeOrmQueryLogger } from './database/typeorm-query.logger';
 
 @Module({
   imports: [
@@ -38,8 +39,9 @@ import { BlogModule } from './blog/blog.module';
           password: config.get('DB_PASS'),
           database: config.get('DB_NAME'),
           autoLoadEntities: true,
-          synchronize: true,
-          logging: dbLogging,
+          synchronize: dbSynchronize,
+          logging: dbLogging ? ['query', 'error', 'warn', 'schema'] : ['error'],
+          logger: new TypeOrmQueryLogger(dbLogging),
           charset: 'utf8mb4',
           collation: 'utf8mb4_unicode_ci',
         };

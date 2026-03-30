@@ -5,6 +5,8 @@ import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import type { Request } from 'express';
 import { JwtAuthGuard } from './guards/jwt.guard';
+import { RolesGuard } from './decorators/roles.guard';
+import { Roles } from './decorators/roles.decorator';
 
 @Controller('auth')
 export class PasswordResetController {
@@ -22,8 +24,9 @@ export class PasswordResetController {
     return { ok: true };
   }
 
-  @UseGuards(JwtAuthGuard)
-  @Post('change-password')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer', 'candidat')
+  @Post(['change-password', 'dashboard/change-password'])
   async change(@Body() dto: ChangePasswordDto, @Req() req: any) {
     await this.svc.changePassword(req.user.id, dto);
     return { ok: true };

@@ -147,6 +147,15 @@ export class UsersController {
     return this.strip(updated);
   }
 
+  // DELETE /users/me
+  @Delete('me')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('employer', 'candidat')
+  async removeMe(@Req() req: any) {
+    await this.users.removeMyAccount(Number(req.user.id));
+    return { success: true };
+  }
+
   // DELETE /users/:id
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)

@@ -1,17 +1,23 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { EmployerProfileController } from './employer-profile.controller';
-import { EmployerProfileService } from './employer-profile.service';
+import { EmployerProfilesController } from './employer-profile.controller';
+import { EmployerProfilesService } from './employer-profile.service';
 
-describe('EmployerProfileController', () => {
-  let controller: EmployerProfileController;
+describe('EmployerProfilesController', () => {
+  let controller: EmployerProfilesController;
+
+  const serviceMock = {
+    getMine: jest.fn(),
+    upsertMine: jest.fn(),
+    getStatus: jest.fn(),
+  };
 
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
-      controllers: [EmployerProfileController],
-      providers: [EmployerProfileService],
+      controllers: [EmployerProfilesController],
+      providers: [{ provide: EmployerProfilesService, useValue: serviceMock }],
     }).compile();
 
-    controller = module.get<EmployerProfileController>(EmployerProfileController);
+    controller = module.get<EmployerProfilesController>(EmployerProfilesController);
   });
 
   it('should be defined', () => {

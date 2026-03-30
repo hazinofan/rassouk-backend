@@ -224,6 +224,17 @@ export class UsersService {
     await this.repo.softDelete(userId);
   }
 
+  async removeMyAccount(userId: number) {
+    const user = await this.repo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    await this.repo.update(userId, {
+      accountDeletedAt: new Date(),
+      refreshTokenHash: null,
+    });
+    await this.repo.softDelete(userId);
+  }
+
   async findEmployerPublicById(id: number) {
     const user = await this.repo.findOne({
       where: { id, role: 'employer' },

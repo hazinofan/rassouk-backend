@@ -21,7 +21,9 @@ export enum TeamSize {
   S_500_PLUS = '500+',
 }
 
-@Entity('employer_profiles')
+export const EMPLOYER_PROFILE_TABLE = 'employer_profiles';
+
+@Entity(EMPLOYER_PROFILE_TABLE)
 export class EmployerProfile {
   // 1:1 with users; PK = FK
   @PrimaryColumn({ name: 'user_id', type: 'int' })
@@ -54,7 +56,7 @@ export class EmployerProfile {
   @Column({ type: 'enum', enum: TeamSize, nullable: true })
   teamSize?: TeamSize;
 
-  @Column({ nullable: true })
+  @Column({ type: 'date', nullable: true })
   yearEstablished?: string;
 
   @Column({ length: 255, nullable: true })

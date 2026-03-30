@@ -1,7 +1,8 @@
 import {
-  IsOptional, IsString, IsEnum, IsUrl, IsInt, Min, Max,
-  IsNumber, IsEmail, Length
+  IsOptional, IsString, IsEnum, IsUrl,
+  IsNumber, IsEmail, Length, Min, Max
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { OrganizationType, TeamSize } from '../entities/employer-profile.entity';
 
 export class UpsertEmployerProfileDto {
@@ -25,7 +26,7 @@ export class UpsertEmployerProfileDto {
   @IsOptional() @IsEnum(TeamSize)
   teamSize?: TeamSize;
 
-  @IsOptional() @IsInt() @Min(1900) @Max(new Date().getFullYear())
+  @IsOptional() @Type(() => String) @IsString() @Length(4, 30)
   yearEstablished?: string;
 
   @IsOptional() @IsUrl()
@@ -43,6 +44,9 @@ export class UpsertEmployerProfileDto {
   // location
   @IsOptional() @IsString()
   address?: string;
+
+  @IsOptional() @IsString()
+  city?: string;
 
   @IsOptional() @IsNumber({ maxDecimalPlaces: 6 }) @Min(-90) @Max(90)
   latitude?: number;
