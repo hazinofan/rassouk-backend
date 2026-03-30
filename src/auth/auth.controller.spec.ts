@@ -6,10 +6,13 @@ import { JwtService } from '@nestjs/jwt';
 import { UsersService } from 'src/users/users.service';
 import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 import { JwtAuthGuard } from './guards/jwt.guard';
+import { DataSource } from 'typeorm';
 
 describe('AuthController', () => {
   let controller: AuthController;
-  const authService = {};
+  const authService = {
+    verifyEmail: jest.fn(),
+  };
   const cfg = {};
   const jwt = {};
   const usersService = {
@@ -18,6 +21,7 @@ describe('AuthController', () => {
   const entitlements = {
     getBillingSnapshot: jest.fn(),
   };
+  const dataSource = {};
 
   beforeEach(async () => {
     jest.clearAllMocks();
@@ -30,6 +34,7 @@ describe('AuthController', () => {
         { provide: UsersService, useValue: usersService },
         { provide: EntitlementsService, useValue: entitlements },
         { provide: JwtAuthGuard, useValue: { canActivate: jest.fn() } },
+        { provide: DataSource, useValue: dataSource },
       ],
     }).compile();
 
@@ -60,5 +65,20 @@ describe('AuthController', () => {
     expect(result.billing).toBeDefined();
     expect(result.billing.planKey).toBe('starter');
     expect(result.billing.usage.max_applications_per_month.remaining).toBe(35);
+  });
+
+  it('returns verify email JSON without redirecting', async () => {
+    authService.verifyEmail.mockResolvedValue({
+      success: true,
+      message: 'Email verifie avec succes',
+    });
+
+    const result = await controller.verify('token-123');
+
+    expect(authService.verifyEmail).toHaveBeenCalledWith('token-123');
+    expect(result).toEqual({
+      success: true,
+      message: 'Email verifie avec succes',
+    });
   });
 });

@@ -4,17 +4,14 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import {
-  DeepPartial,
-  Not,
-  Repository,
-} from 'typeorm';
+import { DeepPartial, Not, Repository } from 'typeorm';
 import { CreateJobDto } from './dto/create-job.dto';
 import { UpdateJobDto } from './dto/update-job.dto';
 import { QueryJobDto } from './dto/query-job.dto';
 import slugify from 'slugify';
 import {
   Job,
+  JobApplicationMode,
   JobLevel,
   JobModerationStatus,
   JobStatus,
@@ -90,7 +87,7 @@ export class JobsService {
     @InjectRepository(JobRefreshEvent)
     private refreshEventsRepo: Repository<JobRefreshEvent>,
     private readonly entitlements: EntitlementsService,
-  ) { }
+  ) {}
 
   private makeSlug(title: string) {
     const base = slugify(title, { lower: true, strict: true, trim: true });
@@ -110,6 +107,47 @@ export class JobsService {
     return n.toFixed(2);
   }
 
+  private resolveApplicationFields(input: {
+    applicationMode?: JobApplicationMode;
+    externalApplyUrl?: string | null;
+  }): Pick<Job, 'applicationMode' | 'externalApplyUrl'> {
+    const applicationMode =
+      input.applicationMode ?? JobApplicationMode.INTERNAL;
+    const externalApplyUrl =
+      typeof input.externalApplyUrl === 'string'
+        ? input.externalApplyUrl.trim()
+        : input.externalApplyUrl;
+
+    if (applicationMode === JobApplicationMode.EXTERNAL) {
+      if (!externalApplyUrl) {
+        throw new BadRequestException(
+          'externalApplyUrl is required when applicationMode is EXTERNAL',
+        );
+      }
+
+      try {
+        const parsed = new URL(externalApplyUrl);
+        if (!parsed.protocol || !parsed.host) {
+          throw new Error('invalid');
+        }
+      } catch {
+        throw new BadRequestException(
+          'externalApplyUrl must be a valid absolute URL when applicationMode is EXTERNAL',
+        );
+      }
+
+      return {
+        applicationMode,
+        externalApplyUrl,
+      };
+    }
+
+    return {
+      applicationMode: JobApplicationMode.INTERNAL,
+      externalApplyUrl: null,
+    };
+  }
+
   async create(dto: CreateJobDto, employerId: number) {
     const activeJobs = await this.countActiveJobs(employerId);
     await this.entitlements.assertEmployerLimit(
@@ -126,9 +164,11 @@ export class JobsService {
       throw new BadRequestException('minSalary must be <= maxSalary');
     }
     await this.assertPremiumVisibilityAccess(employerId, dto);
+    const applicationFields = this.resolveApplicationFields(dto);
 
     const job = this.repo.create({
       ...dto,
+      ...applicationFields,
       minSalary: this.toDecString(dto.minSalary),
       maxSalary: this.toDecString(dto.maxSalary),
       expiresAt: this.toDateOrUndef(dto.expiresAt),
@@ -415,6 +455,8 @@ export class JobsService {
       slug: j.slug,
       jobType: j.jobType,
       status: j.status,
+      applicationMode: j.applicationMode,
+      externalApplyUrl: j.externalApplyUrl ?? null,
       isUrgent: j.isUrgent ?? false,
       isFeatured: j.isFeatured ?? false,
       boostedUntil: j.boostedUntil ?? null,
@@ -435,8 +477,7 @@ export class JobsService {
 
     await this.assertPremiumVisibilityAccess(employerId, dto);
 
-    const setFeaturedOn =
-      dto.isFeatured === true && !job.isFeatured;
+    const setFeaturedOn = dto.isFeatured === true && !job.isFeatured;
     if (setFeaturedOn) {
       const currentFeatured = await this.countFeaturedJobs(employerId, job.id);
       await this.entitlements.assertEmployerLimit(
@@ -447,12 +488,20 @@ export class JobsService {
     }
 
     if (dto.title) job.slug = this.makeSlug(dto.title);
+    const applicationFields = this.resolveApplicationFields({
+      applicationMode: dto.applicationMode ?? job.applicationMode,
+      externalApplyUrl:
+        dto.externalApplyUrl !== undefined
+          ? dto.externalApplyUrl
+          : job.externalApplyUrl,
+    });
     const boostedUntil =
       dto.boostedUntil !== undefined
-        ? this.toDateOrUndef(dto.boostedUntil) ?? null
+        ? (this.toDateOrUndef(dto.boostedUntil) ?? null)
         : job.boostedUntil;
     Object.assign(job, {
       ...dto,
+      ...applicationFields,
       boostedUntil,
     });
     return this.repo.save(job);
@@ -537,6 +586,8 @@ export class JobsService {
       vacancies: source.vacancies,
       currency: source.currency,
       location: source.location,
+      applicationMode: source.applicationMode,
+      externalApplyUrl: source.externalApplyUrl ?? null,
       moderationStatus: source.moderationStatus,
       moderationNote: source.moderationNote,
       moderatedAt: source.moderatedAt,
@@ -560,7 +611,10 @@ export class JobsService {
     employerId: number,
     opts?: { expiresAt?: Date },
   ) {
-    await this.entitlements.assertEmployerFeature(employerId, 'job_refresh_enabled');
+    await this.entitlements.assertEmployerFeature(
+      employerId,
+      'job_refresh_enabled',
+    );
     await this.entitlements.assertEmployerMonthlyActionLimit(
       employerId,
       'max_job_refreshes_per_month',
@@ -706,7 +760,10 @@ export class JobsService {
         'scoreLocation',
         currentJob.location?.trim().toLowerCase() ?? '__none__',
       )
-      .setParameter('scoreRole', currentJob.role?.trim().toLowerCase() ?? '__none__')
+      .setParameter(
+        'scoreRole',
+        currentJob.role?.trim().toLowerCase() ?? '__none__',
+      )
       .setParameter('scoreEmployerId', (currentJob as any).employerId ?? 0)
       .addSelect(
         'CASE WHEN job.boostedUntil IS NOT NULL AND job.boostedUntil >= NOW() THEN 1 ELSE 0 END',
@@ -722,5 +779,37 @@ export class JobsService {
       .take(take);
 
     return await qb.getMany();
+  }
+
+  async findPublicByEmployer(employerId: number, page = 1, limit = 6) {
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 6));
+
+    const [data, total] = await this.repo.findAndCount({
+      where: {
+        employer: {
+          id: employerId
+        },
+        status: JobStatus.ACTIVE, // adapt if your public status is different
+      },
+      relations: {
+        employer: {
+          profile: true,
+        },
+      },
+      order: {
+        createdAt: 'DESC',
+      },
+      skip: (safePage - 1) * safeLimit,
+      take: safeLimit,
+    });
+
+    return {
+      data,
+      total,
+      page: safePage,
+      limit: safeLimit,
+      totalPages: Math.ceil(total / safeLimit),
+    };
   }
 }

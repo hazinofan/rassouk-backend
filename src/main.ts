@@ -18,15 +18,22 @@ async function bootstrap() {
     rawBody: true,
   });
   const config = app.get(ConfigService);
+  const publicDir = join(process.cwd(), 'public');
   const webUrl = config.get<string>('WEB_URL');
   const nodeEnv = config.get<string>('NODE_ENV') ?? 'development';
-  const configuredOrigins = parseCorsOrigins(config.get<string>('CORS_ORIGINS'));
+  const configuredOrigins = parseCorsOrigins(
+    config.get<string>('CORS_ORIGINS'),
+  );
   const localOrigins =
     nodeEnv === 'production'
       ? []
       : ['http://localhost:3000', 'http://127.0.0.1:3000'];
   const allowedOrigins = Array.from(
-    new Set([...localOrigins, ...(webUrl ? [webUrl] : []), ...configuredOrigins]),
+    new Set([
+      ...localOrigins,
+      ...(webUrl ? [webUrl] : []),
+      ...configuredOrigins,
+    ]),
   );
 
   app.enableCors({
@@ -45,7 +52,8 @@ async function bootstrap() {
   );
 
   app.use(cookieParser());
-  app.useStaticAssets(join(process.cwd(), 'public'), { prefix: '/public' });
+  app.useStaticAssets(publicDir, { prefix: '/api/public' });
+  app.useStaticAssets(publicDir, { prefix: '/public' });
 
   await app.listen(process.env.PORT || 4000);
 }

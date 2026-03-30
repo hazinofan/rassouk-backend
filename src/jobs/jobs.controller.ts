@@ -25,7 +25,7 @@ import { JobStatus } from './entities/job.entity';
 import { RefreshJobDto } from './dto/refresh-job.dto';
 @Controller('jobs')
 export class JobsController {
-  constructor(private readonly jobs: JobsService) { }
+  constructor(private readonly jobs: JobsService) {}
 
   // Public endpoints
   @Get()
@@ -127,5 +127,18 @@ export class JobsController {
     @Query('limit') limit?: string,
   ) {
     return this.jobs.findSimilarBySlug(slug, Number(limit) || 6);
+  }
+
+  @Get('company/:employerId')
+  findPublicByEmployer(
+    @Param('employerId', ParseIntPipe) employerId: number,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.jobs.findPublicByEmployer(
+      employerId,
+      Number(page) || 1,
+      Number(limit) || 6,
+    );
   }
 }

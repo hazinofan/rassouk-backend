@@ -7,7 +7,11 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { Application, ApplicationStatus } from './entities/application.entity';
-import { Job, JobStatus } from 'src/jobs/entities/job.entity';
+import {
+  Job,
+  JobApplicationMode,
+  JobStatus,
+} from 'src/jobs/entities/job.entity';
 import { CandidateProfile } from 'src/candidate-profile/entities/candidate-profile.entity';
 import { CreateApplicationDto } from './dto/create-application.dto';
 import { MailService } from 'src/mail/mail.service';
@@ -50,6 +54,11 @@ export class ApplicationsService {
       throw new BadRequestException('Job not active');
     if (job.expiresAt && job.expiresAt < new Date())
       throw new BadRequestException('Job expired');
+    if (job.applicationMode === JobApplicationMode.EXTERNAL) {
+      throw new BadRequestException(
+        'This job only accepts applications on the employer external website',
+      );
+    }
 
     // Duplicate check
     const already = await this.appRepo.exists({

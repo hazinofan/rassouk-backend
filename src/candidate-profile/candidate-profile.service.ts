@@ -22,12 +22,16 @@ import { EntitlementsService } from 'src/subscriptions/entitlements.service';
 @Injectable()
 export class CandidateProfilesService {
   constructor(
-    @InjectRepository(CandidateProfile) private profiles: Repository<CandidateProfile>,
-    @InjectRepository(CandidateExperience) private exps: Repository<CandidateExperience>,
-    @InjectRepository(CandidateEducation) private edus: Repository<CandidateEducation>,
-    @InjectRepository(CandidateResume) private resumes: Repository<CandidateResume>,
+    @InjectRepository(CandidateProfile)
+    private profiles: Repository<CandidateProfile>,
+    @InjectRepository(CandidateExperience)
+    private exps: Repository<CandidateExperience>,
+    @InjectRepository(CandidateEducation)
+    private edus: Repository<CandidateEducation>,
+    @InjectRepository(CandidateResume)
+    private resumes: Repository<CandidateResume>,
     private readonly entitlements: EntitlementsService,
-  ) { }
+  ) {}
 
   async getMine(userId: number) {
     return this.profiles.findOne({
@@ -134,9 +138,12 @@ export class CandidateProfilesService {
       experienceMax,
       degreeMinLevel,
       degreeIncludes,
+      experienceBuckets = [],
+      educations = [],
     } = dto;
 
-    const qb = this.profiles.createQueryBuilder('p')
+    const qb = this.profiles
+      .createQueryBuilder('p')
       .select([
         'p.userId',
         'p.photoPath',
@@ -148,7 +155,6 @@ export class CandidateProfilesService {
         'p.updatedAt',
       ]);
 
-    // yearsExp: total span using the stored start/end years
     const yearsExpExpr = `
     (
       SELECT IFNULL(MAX(COALESCE(e.toYear, e.fromYear)) - MIN(e.fromYear) + 1, 0)
@@ -158,7 +164,6 @@ export class CandidateProfilesService {
   `;
     qb.addSelect(yearsExpExpr, 'yearsExp');
 
-    // highestDegree: keep your original string (best single entry)
     const highestDegreeExpr = `
     (
       SELECT ed.degree
@@ -170,7 +175,6 @@ export class CandidateProfilesService {
   `;
     qb.addSelect(highestDegreeExpr, 'highestDegree');
 
-    // degreeRank: robust normalization (FR/EN + common abbreviations)
     const degreeRankExpr = `
     (
       SELECT IFNULL(MAX(
@@ -190,7 +194,6 @@ export class CandidateProfilesService {
   `;
     qb.addSelect(degreeRankExpr, 'degreeRank');
 
-    // ---------- Filters ----------
     if (q) {
       const terms = q.toLowerCase().split(/\s+/).filter(Boolean);
       terms.forEach((t, i) => {
@@ -206,44 +209,136 @@ export class CandidateProfilesService {
         );
       });
     }
+
     if (city) qb.andWhere('p.city = :city', { city });
     if (gender) qb.andWhere('p.gender = :gender', { gender });
-    if (nationality) qb.andWhere('p.nationality = :nationality', { nationality });
+    if (nationality)
+      qb.andWhere('p.nationality = :nationality', { nationality });
+
     if (typeof onboardingCompleted !== 'undefined') {
-      qb.andWhere('p.onboardingCompleted = :oc', { oc: onboardingCompleted === '1' });
+      qb.andWhere('p.onboardingCompleted = :oc', {
+        oc: onboardingCompleted === '1',
+      });
     }
 
-    // Experience range
-    if (typeof experienceMin === 'number') qb.andWhere(`${yearsExpExpr} >= :expMin`, { expMin: experienceMin });
-    if (typeof experienceMax === 'number') qb.andWhere(`${yearsExpExpr} <= :expMax`, { expMax: experienceMax });
+    if (experienceBuckets.length) {
+      const ranges: Array<{ min?: number; max?: number }> =
+        experienceBuckets.map((bucket) => {
+          switch (bucket) {
+            case 'Freshers':
+              return { min: 0, max: 0 };
+            case '1 - 2 Years':
+              return { min: 1, max: 2 };
+            case '2 - 4 Years':
+              return { min: 2, max: 4 };
+            case '4 - 6 Years':
+              return { min: 4, max: 6 };
+            case '6 - 8 Years':
+              return { min: 6, max: 8 };
+            case '8 - 10 Years':
+              return { min: 8, max: 10 };
+            case '10 - 15 Years':
+              return { min: 10, max: 15 };
+            case '15+ Years':
+              return { min: 15, max: undefined };
+            default:
+              return {};
+          }
+        });
 
-    // Degree minimum level (0..6)
-    if (typeof degreeMinLevel === 'number') qb.andWhere(`${degreeRankExpr} >= :degMin`, { degMin: degreeMinLevel });
+      const validRanges = ranges.filter(
+        (r) => typeof r.min === 'number' || typeof r.max === 'number',
+      );
 
-    // Degree fuzzy text contains
-    if (degreeIncludes && degreeIncludes.trim()) {
-      qb.andWhere(`EXISTS (
-      SELECT 1 FROM candidate_educations ed2
-      WHERE ed2.user_id = p.user_id
-        AND LOWER(ed2.degree) LIKE :degLike
-    )`, { degLike: `%${degreeIncludes.toLowerCase()}%` });
+      if (validRanges.length) {
+        const orParts: string[] = [];
+        const params: Record<string, number> = {};
+
+        validRanges.forEach((r, i) => {
+          if (typeof r.min === 'number' && typeof r.max === 'number') {
+            orParts.push(
+              `(${yearsExpExpr} BETWEEN :expBucketMin${i} AND :expBucketMax${i})`,
+            );
+            params[`expBucketMin${i}`] = r.min;
+            params[`expBucketMax${i}`] = r.max;
+          } else if (typeof r.min === 'number') {
+            orParts.push(`(${yearsExpExpr} >= :expBucketMin${i})`);
+            params[`expBucketMin${i}`] = r.min;
+          } else if (typeof r.max === 'number') {
+            orParts.push(`(${yearsExpExpr} <= :expBucketMax${i})`);
+            params[`expBucketMax${i}`] = r.max;
+          }
+        });
+
+        if (orParts.length) {
+          qb.andWhere(`(${orParts.join(' OR ')})`, params);
+        }
+      }
+    } else {
+      if (typeof experienceMin === 'number') {
+        qb.andWhere(`${yearsExpExpr} >= :expMin`, { expMin: experienceMin });
+      }
+      if (typeof experienceMax === 'number') {
+        qb.andWhere(`${yearsExpExpr} <= :expMax`, { expMax: experienceMax });
+      }
     }
 
-    // ---------- Sorting ----------
+    if (typeof degreeMinLevel === 'number') {
+      qb.andWhere(`${degreeRankExpr} >= :degMin`, { degMin: degreeMinLevel });
+    }
+
+    if (educations.length) {
+      const eduTerms = educations
+        .map((e) => String(e).trim().toLowerCase())
+        .filter(Boolean);
+
+      if (eduTerms.length) {
+        const orParts: string[] = [];
+        const params: Record<string, string> = {};
+
+        eduTerms.forEach((term, i) => {
+          orParts.push(`LOWER(ed2.degree) LIKE :eduLike${i}`);
+          params[`eduLike${i}`] = `%${term}%`;
+        });
+
+        qb.andWhere(
+          `EXISTS (
+          SELECT 1
+          FROM candidate_educations ed2
+          WHERE ed2.user_id = p.user_id
+            AND (${orParts.join(' OR ')})
+        )`,
+          params,
+        );
+      }
+    } else if (degreeIncludes && degreeIncludes.trim()) {
+      qb.andWhere(
+        `EXISTS (
+        SELECT 1 FROM candidate_educations ed2
+        WHERE ed2.user_id = p.user_id
+          AND LOWER(ed2.degree) LIKE :degLike
+      )`,
+        { degLike: `%${degreeIncludes.toLowerCase()}%` },
+      );
+    }
+
     if (sort === 'latest') qb.orderBy('p.updatedAt', 'DESC');
     else if (sort === 'oldest') qb.orderBy('p.updatedAt', 'ASC');
-    else if (sort === 'name') qb.orderBy('p.lastName', 'ASC').addOrderBy('p.firstName', 'ASC');
-    else if (sort === 'experience_desc') qb.orderBy('yearsExp', 'DESC').addOrderBy('p.updatedAt', 'DESC');
-    else if (sort === 'experience_asc') qb.orderBy('yearsExp', 'ASC').addOrderBy('p.updatedAt', 'DESC');
-    else if (sort === 'degree_desc') qb.orderBy('degreeRank', 'DESC').addOrderBy('p.updatedAt', 'DESC');
-    else if (sort === 'degree_asc') qb.orderBy('degreeRank', 'ASC').addOrderBy('p.updatedAt', 'DESC');
+    else if (sort === 'name')
+      qb.orderBy('p.lastName', 'ASC').addOrderBy('p.firstName', 'ASC');
+    else if (sort === 'experience_desc')
+      qb.orderBy('yearsExp', 'DESC').addOrderBy('p.updatedAt', 'DESC');
+    else if (sort === 'experience_asc')
+      qb.orderBy('yearsExp', 'ASC').addOrderBy('p.updatedAt', 'DESC');
+    else if (sort === 'degree_desc')
+      qb.orderBy('degreeRank', 'DESC').addOrderBy('p.updatedAt', 'DESC');
+    else if (sort === 'degree_asc')
+      qb.orderBy('degreeRank', 'ASC').addOrderBy('p.updatedAt', 'DESC');
 
-    // ---------- Pagination ----------
     qb.skip((page - 1) * pageSize).take(pageSize);
 
     const { entities, raw } = await qb.getRawAndEntities();
 
-    // project response
     const items = entities.map((e, i) => ({
       userId: e.userId,
       photoPath: e.photoPath,
@@ -253,22 +348,20 @@ export class CandidateProfilesService {
       city: e.city,
       createdAt: e.createdAt,
       updatedAt: e.updatedAt,
-      yearsExp: raw[i]?.yearsExp != null ? Number(raw[i].yearsExp) : 0,
+      years: raw[i]?.yearsExp != null ? Number(raw[i].yearsExp) : 0,
       highestDegree: raw[i]?.highestDegree ?? null,
-      // degreeRank is internal (used for filter/sort); don’t expose unless you want to:
-      // degreeRank: raw[i]?.degreeRank != null ? Number(raw[i].degreeRank) : 0,
     }));
 
-    // TypeORM getCount() on same WHEREs (clone without skip/take for correctness if needed)
-    const total = await this.profiles.createQueryBuilder('p')
-      .where(qb.getSql().match(/WHERE (.*?)( ORDER BY| LIMIT| OFFSET|$)/s)?.[1] ?? '1=1') // fallback
+    const total = await this.profiles
+      .createQueryBuilder('p')
+      .where(
+        qb.getSql().match(/WHERE (.*?)( ORDER BY| LIMIT| OFFSET|$)/s)?.[1] ??
+          '1=1',
+      )
       .getCount()
       .catch(async () => {
-        // Safe fallback: run count with same WHEREs via cloned QB (TypeORM v<=0.3.x quirks)
         const countQb = this.profiles.createQueryBuilder('p');
         countQb.setParameters(qb.getParameters());
-        // Reapply filters (duplicate minimal code if needed); or simpler:
-        // use qb.clone() if your TypeORM version supports it cleanly for count
         return qb.getCount();
       });
 

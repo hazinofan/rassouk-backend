@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { DeepPartial, Repository } from 'typeorm';
 import { User } from './users.entity';
@@ -83,9 +83,12 @@ export class UsersService {
     }
 
     if (query.industryType?.trim()) {
-      qb.andWhere(`LOWER(COALESCE(profile.industryType, '')) LIKE :industryType`, {
-        industryType: `%${query.industryType.trim().toLowerCase()}%`,
-      });
+      qb.andWhere(
+        `LOWER(COALESCE(profile.industryType, '')) LIKE :industryType`,
+        {
+          industryType: `%${query.industryType.trim().toLowerCase()}%`,
+        },
+      );
     }
 
     const jobsMin = Number(query.jobsMin);
@@ -219,5 +222,48 @@ export class UsersService {
   // NEW: remove user
   async remove(userId: number) {
     await this.repo.softDelete(userId);
+  }
+
+  async findEmployerPublicById(id: number) {
+    const user = await this.repo.findOne({
+      where: { id, role: 'employer' },
+      relations: {
+        profile: true,
+      },
+    });
+
+    if (!user) {
+      throw new NotFoundException('Employer not found');
+    }
+
+    const profile = (user.profile || {}) as any;
+
+    return {
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      profile: {
+        companyName: profile.companyName ?? null,
+        about: profile.about ?? null,
+        vision: profile.vision ?? null,
+        industryType: profile.industryType ?? null,
+        organizationType: profile.organizationType ?? null,
+        teamSize: profile.teamSize ?? null,
+        address: profile.address ?? null,
+        city: profile.city ?? null,
+        country: profile.country ?? null,
+        websiteUrl: profile.websiteUrl ?? null,
+        contactEmail: profile.contactEmail ?? null,
+        companyPhone: profile.companyPhone ?? null,
+        logoUrl: profile.logoUrl ?? null,
+        bannerUrl: profile.bannerUrl ?? null,
+        yearEstablished: profile.yearEstablished ?? null,
+        facebookUrl: profile.facebookUrl ?? null,
+        instagramUrl: profile.instagramUrl ?? null,
+        twitterUrl: profile.twitterUrl ?? null,
+        linkedinUrl: profile.linkedinUrl ?? null,
+        socialLinks: profile.socialLinks ?? [],
+      },
+    };
   }
 }

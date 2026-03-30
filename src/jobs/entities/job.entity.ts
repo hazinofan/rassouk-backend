@@ -11,6 +11,7 @@ export enum JobType { FULL_TIME='FULL_TIME', PART_TIME='PART_TIME', INTERNSHIP='
 export enum JobLevel { JUNIOR='JUNIOR', MID='MID', SENIOR='SENIOR', LEAD='LEAD' }
 export enum JobStatus { DRAFT='DRAFT', ACTIVE='ACTIVE', PAUSED='PAUSED', EXPIRED='EXPIRED' }
 export enum JobModerationStatus { PENDING='PENDING', APPROVED='APPROVED', REJECTED='REJECTED' }
+export enum JobApplicationMode { INTERNAL='INTERNAL', EXTERNAL='EXTERNAL' }
 
 @Entity('jobs')
 @Index(['status', 'expiresAt'])
@@ -66,6 +67,16 @@ export class Job {
 
   @Column({ length: 120, nullable: true })
   location?: string;
+
+  @Column({
+    type: 'enum',
+    enum: JobApplicationMode,
+    default: JobApplicationMode.INTERNAL,
+  })
+  applicationMode: JobApplicationMode;
+
+  @Column({ type: 'varchar', length: 2048, nullable: true })
+  externalApplyUrl?: string | null;
 
   @Column({ type: 'timestamp', nullable: true })
   expiresAt?: Date;
